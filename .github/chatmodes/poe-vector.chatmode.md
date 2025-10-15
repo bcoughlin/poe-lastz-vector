@@ -41,8 +41,10 @@ This chat mode specializes in developing Poe bots with Modal deployment, focusin
 - Use `fastapi-poe==0.0.48` for stable API compatibility
 - **Critical**: Remove `request_id` parameter from `fp.stream_request()`
 - **Critical**: Don't include `tool_definitions` in `SettingsResponse`
+- **CRITICAL**: For single bot: `fp.make_app(bot, access_key=access_key, bot_name=bot_name)`
+- **Multiple bots**: Must set credentials on each bot object individually, not in make_app()
+- **CRITICAL**: Include `allow_without_key=not (bot_access_key and bot_name)` for fallback during development
 - Always use `@modal.asgi_app()` decorator for web endpoints
-- Use `fp.make_app(bot, access_key=access_key, bot_name=bot_name)` pattern
 
 **Unicode Handling:**
 - **Always sanitize text** before sending to GPT models to prevent encoding errors
@@ -101,7 +103,59 @@ f"Bot Name V5.9 ({deploy_time}) - Hash: {deploy_hash[:4]}"
 )
 ```
 
-### Authentication & Integration
+### Modal Volume Management
+
+**Volume Operations:**
+- `modal volume create <volume-name>` - Create a new persistent volume
+- `modal volume list` - List all volumes with status and timestamps
+- `modal volume ls <volume-name>` - List contents of a volume
+- `modal volume ls <volume-name> <path>` - List contents of specific directory
+- `modal volume put <volume-name> <local-path> <remote-path>` - Upload files/directories
+- `modal volume get <volume-name> <remote-path> <local-path>` - Download files
+- `modal volume get <volume-name> <remote-path> -` - Print file contents to stdout
+
+**Volume Patterns:**
+- **Data Persistence**: Use volumes for dynamic knowledge bases and model weights
+- **Mounting**: `volumes={"/app/data": volume}` mounts volume at container path
+- **Batch Upload**: Use `volume.batch_upload()` for efficient multi-file uploads
+- **Commits**: Call `volume.commit()` after writes to persist changes
+- **Reloads**: Call `volume.reload()` to see changes from other containers
+
+**Navigation Examples:**
+```bash
+# Check volume structure
+modal volume ls lastz-data
+modal volume ls lastz-data data/heroes
+modal volume ls lastz-data data/core
+
+# View specific files
+modal volume get lastz-data data/core/data_index.md -
+modal volume get lastz-data data/heroes/hero_natalie.json -
+
+# Upload new data
+modal volume put lastz-data local-data-dir/ /remote-path/
+```
+
+**Dynamic Loading Architecture:**
+- Mount volumes at `/app/data` for consistent paths
+- Use `data_index.md` for configuration-driven file discovery
+- Parse JSON and Markdown files into knowledge format
+- Store parsed knowledge in `_knowledge_items` for vector search
+- No static fallbacks - transparent error reporting
+
+### GPT Model Access Limitations
+
+**Important Constraints:**
+- **GPT-5 Only Available in Poe**: Cannot access GPT-5 models outside of poe.com platform
+- **Tool Calling**: GPT-5 tool calling only works within Poe's infrastructure
+- **External Testing**: Use curl to test endpoints, but expect GPT communication errors
+- **Local Development**: Use `modal serve` for local testing of non-GPT components
+
+**Testing Strategy:**
+- ✅ Test settings endpoint with curl for reachability
+- ✅ Test volume mounting and data loading separately  
+- ✅ Use Modal logs to debug dynamic loading issues
+- ❌ Cannot test full GPT conversation flow outside Poe platform
 
 **MCP Service Integration:**
 - **Working Pattern**: Use `requests.get()` without Authorization headers
