@@ -4,15 +4,15 @@ Pure GPT-5 tool calling for intelligent player data management.
 No manual extraction - 100% LLM-driven with vector search.
 """
 
-import os
-import json
-import numpy as np
-from datetime import datetime
-from typing import Any, AsyncIterable, Dict, List
 import hashlib
+import os
+from collections.abc import AsyncIterable
+from datetime import datetime
+
+import modal
+import numpy as np
 
 import fastapi_poe as fp
-import modal
 
 # Generate hash for cache busting
 deploy_hash = hashlib.md5(str(datetime.now().timestamp()).encode()).hexdigest()[:6]
@@ -24,7 +24,7 @@ app = modal.App(f"poe-lastz-v7-1-{deploy_hash}")
 image = modal.Image.debian_slim().pip_install([
     "fastapi-poe==0.0.48",
     "sentence-transformers",
-    "numpy", 
+    "numpy",
     "scikit-learn",
 ])
 
@@ -42,7 +42,7 @@ LASTZ_KNOWLEDGE = [
 
 class LastZCleanBot(fp.PoeBot):
     """Clean tool-based Last Z assistant."""
-    
+
     def __init__(self):
         super().__init__()
         self._encoder = None
@@ -56,7 +56,7 @@ class LastZCleanBot(fp.PoeBot):
 
 **Pure Tool-Based Architecture:**
 - 🧠 **Smart data extraction** - GPT-5 detects player info naturally
-- 🔍 **Vector knowledge search** - Semantic understanding of game questions  
+- 🔍 **Vector knowledge search** - Semantic understanding of game questions
 - 💾 **Persistent memory** - Remember your progress across conversations
 
 Just chat normally - I'll intelligently track your progress and give personalized advice!
@@ -70,20 +70,19 @@ Just chat normally - I'll intelligently track your progress and give personalize
         if self._encoder is None:
             try:
                 from sentence_transformers import SentenceTransformer
-                from sklearn.metrics.pairwise import cosine_similarity
-                
+
                 self._encoder = SentenceTransformer('all-MiniLM-L6-v2')
                 texts = [item["text"] for item in LASTZ_KNOWLEDGE]
                 self._embeddings = self._encoder.encode(texts)
                 print(f"✅ Vector search ready: {len(texts)} items")
-            except:
+            except Exception:
                 self._encoder = "fallback"
                 print("⚠️ Using keyword fallback")
 
-    def search_knowledge(self, query: str, top_k: int = 3) -> List[str]:
+    def search_knowledge(self, query: str, top_k: int = 3) -> list[str]:
         """Search knowledge base."""
         self._init_vector_search()
-        
+
         if self._encoder == "fallback":
             # Simple keyword fallback
             query_words = query.lower().split()
@@ -94,25 +93,25 @@ Just chat normally - I'll intelligently track your progress and give personalize
                     results.append((score, item["text"]))
             results.sort(reverse=True)
             return [text for _, text in results[:top_k]]
-        
+
         try:
             from sklearn.metrics.pairwise import cosine_similarity
             query_embedding = self._encoder.encode([query])
             similarities = cosine_similarity(query_embedding, self._embeddings)[0]
             top_indices = np.argsort(similarities)[-top_k:][::-1]
             return [LASTZ_KNOWLEDGE[i]["text"] for i in top_indices if similarities[i] > 0.3]
-        except:
+        except Exception:
             return []
 
     async def get_response(self, request: fp.QueryRequest) -> AsyncIterable[fp.PartialResponse]:
         """Main response handler."""
-        
+
         # Get user message
         user_message = request.query[-1].content
-        
+
         # Search knowledge base
         relevant_knowledge = self.search_knowledge(user_message)
-        
+
         # Build enhanced system prompt
         knowledge_context = ""
         if relevant_knowledge:
@@ -129,14 +128,14 @@ Just chat normally - I'll intelligently track your progress and give personalize
         # Create enhanced request
         enhanced_messages = [fp.ProtocolMessage(role="system", content=system_prompt)]
         enhanced_messages.extend(request.query)
-        
+
         enhanced_request = fp.QueryRequest(
             query=enhanced_messages,
             user_id=request.user_id,
             conversation_id=request.conversation_id,
             message_id=request.message_id,
         )
-        
+
         # Stream response from GPT-5
         async for msg in fp.stream_request(enhanced_request, "GPT-5", enhanced_request):
             yield msg
