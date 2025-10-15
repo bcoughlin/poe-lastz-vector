@@ -1,6 +1,6 @@
 """
-Last Z: Assistant V7.6 - Vector Embeddings + Tool Calling
-Uses semantic search across all game data instead of specific handlers.
+Last Z: Assistant V7.7 - True Vector Embeddings + Semantic Search
+Implements real vector embeddings with sentence-transformers for semantic understanding.
 """
 
 import hashlib
@@ -9,6 +9,7 @@ import os
 from collections.abc import AsyncIterable
 from datetime import datetime
 from typing import List, Dict, Any
+import numpy as np
 
 import fastapi_poe as fp
 from modal import App, Image, asgi_app
@@ -22,12 +23,27 @@ bot_access_key = "DjeSMuL0QwiwBSLa33Pa6t97kxhEmmXb"
 bot_name = "LastZBetaV7"
 
 class LastZVectorSearch:
-    """Simple vector search using embeddings"""
+    """True vector search using sentence-transformers embeddings"""
     
     def __init__(self):
         self.knowledge_items = []
         self.embeddings = None
+        self.model = None
+        self._load_model()
         self._load_all_data()
+        self._create_embeddings()
+    
+    def _load_model(self):
+        """Load the sentence transformer model"""
+        try:
+            from sentence_transformers import SentenceTransformer
+            print("🤖 Loading sentence transformer model...")
+            # Use a lightweight model suitable for Modal deployment
+            self.model = SentenceTransformer('all-MiniLM-L6-v2')
+            print("✅ Model loaded successfully")
+        except Exception as e:
+            print(f"❌ Failed to load model: {e}")
+            self.model = None
     
     def _load_all_data(self):
         """Load and process all JSON data into searchable items"""
@@ -52,7 +68,18 @@ class LastZVectorSearch:
                         hero_text += f"Role: {hero_data.get('role', 'Unknown')} "
                         hero_text += f"Rarity: {hero_data.get('rarity', 'Unknown')} "
                         if 'skills' in hero_data:
-                            hero_text += f"Skills: {' '.join(hero_data['skills'])} "
+                            # Handle skills as list of dicts or strings
+                            skills = hero_data['skills']
+                            if isinstance(skills, list):
+                                skill_names = []
+                                for skill in skills:
+                                    if isinstance(skill, dict):
+                                        skill_names.append(skill.get('name', 'Unknown Skill'))
+                                    else:
+                                        skill_names.append(str(skill))
+                                hero_text += f"Skills: {' '.join(skill_names)} "
+                            else:
+                                hero_text += f"Skills: {str(skills)} "
                         if 'description' in hero_data:
                             hero_text += f"Description: {hero_data['description']}"
                         
@@ -125,13 +152,64 @@ class LastZVectorSearch:
         
         print(f"✅ Loaded {len(self.knowledge_items)} knowledge items")
     
-    def simple_text_search(self, query: str, max_results: int = 5) -> List[Dict[str, Any]]:
-        """Simple keyword-based search (placeholder for embeddings)"""
+    def _create_embeddings(self):
+        """Create embeddings for all knowledge items"""
+        if not self.model or not self.knowledge_items:
+            print("❌ Cannot create embeddings - model or data missing")
+            return
+        
+        try:
+            print("🧠 Creating embeddings for knowledge items...")
+            texts = [item['text'] for item in self.knowledge_items]
+            self.embeddings = self.model.encode(texts)
+            print(f"✅ Created embeddings: {self.embeddings.shape}")
+        except Exception as e:
+            print(f"❌ Failed to create embeddings: {e}")
+            self.embeddings = None
+    
+    def vector_search(self, query: str, min_similarity: float = 0.15) -> List[Dict[str, Any]]:
+        """True vector search using semantic similarity - returns all relevant results above threshold"""
+        if not self.model or self.embeddings is None:
+            print("⚠️ Falling back to keyword search - embeddings not available")
+            return self.simple_text_search(query)
+        
+        try:
+            from sklearn.metrics.pairwise import cosine_similarity
+            
+            # Create query embedding
+            query_embedding = self.model.encode([query])
+            
+            # Calculate similarities
+            similarities = cosine_similarity(query_embedding, self.embeddings)[0]
+            
+            # Get all results above threshold, sorted by relevance
+            top_indices = np.argsort(similarities)[::-1]
+            
+            results = []
+            for idx in top_indices:
+                if similarities[idx] > min_similarity:  # Only include relevant results
+                    item = self.knowledge_items[idx].copy()
+                    item['similarity_score'] = float(similarities[idx])
+                    results.append(item)
+                else:
+                    break  # Stop when similarity gets too low (since sorted)
+            
+            print(f"🔍 Vector search found {len(results)} results above {min_similarity} similarity")
+            if results:
+                print(f"Similarity range: {results[0]['similarity_score']:.3f} to {results[-1]['similarity_score']:.3f}")
+            return results
+            
+        except Exception as e:
+            print(f"❌ Vector search failed: {e}")
+            return self.simple_text_search(query, max_results)
+    
+    def simple_text_search(self, query: str) -> List[Dict[str, Any]]:
+        """Fallback keyword-based search - returns all relevant matches"""
+        print("📝 Using fallback keyword search")
         query_lower = query.lower()
         results = []
         
         for item in self.knowledge_items:
-            # Simple scoring based on keyword matches
             score = 0
             text_lower = item['text'].lower()
             
@@ -145,14 +223,13 @@ class LastZVectorSearch:
                     score += 1
             
             if score > 0:
-                results.append({
-                    'score': score,
-                    'item': item
-                })
+                item_copy = item.copy()
+                item_copy['keyword_score'] = score
+                results.append(item_copy)
         
-        # Sort by score and return top results
-        results.sort(key=lambda x: x['score'], reverse=True)
-        return [r['item'] for r in results[:max_results]]
+        # Sort by score and return all relevant results
+        results.sort(key=lambda x: x.get('keyword_score', 0), reverse=True)
+        return results
 
 # Global search instance
 vector_search = LastZVectorSearch()
@@ -160,7 +237,7 @@ vector_search = LastZVectorSearch()
 # Tool function that GPT can call
 def search_lastz_knowledge(user_query: str) -> str:
     """
-    Search Last Z game knowledge using the user's natural language query.
+    Search Last Z game knowledge using semantic vector search.
     
     Args:
         user_query: Natural language question about Last Z game content
@@ -169,34 +246,44 @@ def search_lastz_knowledge(user_query: str) -> str:
         JSON string with relevant game knowledge
     """
     try:
-        print(f"🔧 Search tool called: '{user_query}'")
+        print(f"🔧 Vector search tool called: '{user_query}'")
         
         if not vector_search.knowledge_items:
             return json.dumps({"error": "No knowledge data loaded"})
         
-        # Perform search
-        results = vector_search.simple_text_search(user_query, max_results=5)
+        # Perform vector search - let GPT decide how much info it needs
+        results = vector_search.vector_search(user_query)
         
         if not results:
             return json.dumps({
                 "query": user_query,
-                "message": "No specific matches found in knowledge base",
-                "total_items": len(vector_search.knowledge_items)
+                "message": "No relevant matches found in knowledge base",
+                "total_items": len(vector_search.knowledge_items),
+                "search_method": "vector" if vector_search.embeddings is not None else "keyword"
             })
         
         # Format results
         formatted_results = []
         for item in results:
-            formatted_results.append({
+            result_item = {
                 "type": item['type'],
                 "name": item['name'],
                 "summary": item['text'][:200] + "..." if len(item['text']) > 200 else item['text'],
                 "full_data": item['data']
-            })
+            }
+            
+            # Add similarity score if available
+            if 'similarity_score' in item:
+                result_item['similarity_score'] = item['similarity_score']
+            elif 'keyword_score' in item:
+                result_item['keyword_score'] = item['keyword_score']
+            
+            formatted_results.append(result_item)
         
         return json.dumps({
             "query": user_query,
             "results_count": len(formatted_results),
+            "search_method": "vector" if vector_search.embeddings is not None else "keyword_fallback",
             "results": formatted_results
         }, indent=2)
         
@@ -210,7 +297,7 @@ tool_definitions = [
         "type": "function",
         "function": {
             "name": "search_lastz_knowledge",
-            "description": "Search Last Z game knowledge using natural language. Pass the user's exact question to find relevant heroes, buildings, equipment, and strategy information.",
+            "description": "Search Last Z game knowledge using semantic vector embeddings. Returns ALL semantically relevant content above similarity threshold - GPT will intelligently filter and summarize the most important information for the user's specific question. IMPORTANT: Always cite your sources by mentioning the specific item names and types from the search results (e.g., 'According to the hero data for Natalie...' or 'Based on the Training Ground building info...'). Include similarity scores when mentioning sources for transparency.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -252,7 +339,7 @@ class LastZEmbeddingsBot(fp.PoeBot):
     async def get_response(
         self, request: fp.QueryRequest
     ) -> AsyncIterable[fp.PartialResponse]:
-        """Use semantic search to find relevant game knowledge"""
+        """Use vector semantic search to find relevant game knowledge"""
         # Sanitize the user message
         if request.query:
             sanitized_query = []
@@ -276,7 +363,7 @@ class LastZEmbeddingsBot(fp.PoeBot):
         else:
             sanitized_request = request
         
-        # Stream with semantic search tool calling
+        # Stream with vector search tool calling
         async for msg in fp.stream_request(
             sanitized_request,
             "GPT-5",
@@ -290,11 +377,11 @@ class LastZEmbeddingsBot(fp.PoeBot):
         return fp.SettingsResponse(
             server_bot_dependencies={"GPT-5": 1},
             allow_attachments=False,
-            introduction_message=f"Last Z Assistant V7.6 ({deploy_time}) - Hash: {deploy_hash[:4]}\n\n🔍 SEMANTIC SEARCH VERSION\n\n✅ Intelligent knowledge search across:\n• Heroes (roles, skills, rarities)\n• Buildings (functions, scaling, notes)  \n• Equipment (stats, descriptions)\n\n🧠 Ask naturally - I'll find relevant information!\n\n💡 Try: 'Best heroes for early game' or 'How does the Training Ground work?'"
+            introduction_message=f"Last Z Assistant V7.7 ({deploy_time}) - Hash: {deploy_hash[:4]}\n\n🧠 TRUE VECTOR EMBEDDINGS with Semantic Search\n\n✅ AI-powered semantic understanding:\n• Heroes (roles, skills, strategies)\n• Buildings (scaling, synergies)\n• Equipment (optimal loadouts)\n\n🔍 Finds conceptually related information, not just keywords!\n🎯 Includes similarity scores for transparency\n\n💡 Try: 'Early game tank strategy' or 'Heroes that synergize with resource buildings'"
         )
 
-# Modal setup with local data mounting
-REQUIREMENTS = ["fastapi-poe", "numpy", "scikit-learn"]
+# Modal setup with vector embeddings
+REQUIREMENTS = ["fastapi-poe", "numpy", "scikit-learn", "sentence-transformers", "torch"]
 image = (
     Image.debian_slim()
     .pip_install(*REQUIREMENTS)
@@ -304,7 +391,7 @@ image = (
         remote_path="/app/data"
     )
 )
-app = App(f"poe-lastz-v7-6-embeddings-{deploy_hash}")
+app = App(f"poe-lastz-v7-7-vectors-{deploy_hash}")
 
 @app.function(image=image)
 @asgi_app()
@@ -318,12 +405,12 @@ def fastapi_app():
     )
 
 if __name__ == "__main__":
-    print("🧪 Testing vector search...")
+    print("🧪 Testing vector embeddings search...")
     try:
         search = LastZVectorSearch()
-        test_result = search.simple_text_search("natalie hero")
+        test_result = search.vector_search("best tank hero for early game")
         print(f"✅ Test result: Found {len(test_result)} items")
         if test_result:
-            print(f"First result: {test_result[0]['name']}")
+            print(f"Top result: {test_result[0]['name']} (similarity: {test_result[0].get('similarity_score', 'N/A')})")
     except Exception as e:
         print(f"❌ Test failed: {e}")
