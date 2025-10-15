@@ -1,0 +1,8 @@
+fastapi-poe
+modal
+httpx
+pillow
+
+# Development tools
+ruff
+mypy
