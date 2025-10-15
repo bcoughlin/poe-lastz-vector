@@ -138,6 +138,11 @@ Just chat normally - I'll intelligently track your progress and give personalize
         knowledge = []
         
         try:
+            # CRITICAL: Reload volume to see files uploaded after container creation
+            if hasattr(self, '_volume'):
+                self._volume.reload()
+                print("🔄 Volume reloaded to see latest changes")
+            
             # For now, check if data directory exists (future: implement full dynamic loading)
             data_path = "/app/data"
             if os.path.exists(data_path):
@@ -505,6 +510,7 @@ Just chat normally - I'll intelligently track your progress and give personalize
 @modal.asgi_app()
 def fastapi_app():
     bot = LastZCleanBot()
+    bot._volume = lastz_data_volume  # Pass volume for reload
     return fp.make_app(bot, access_key=os.environ["POE_ACCESS_KEY"], bot_name=os.environ["POE_BOT_NAME"])
 
 if __name__ == "__main__":
