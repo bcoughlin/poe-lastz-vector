@@ -60,19 +60,34 @@ def get_lastz_data(query_type: str = "heroes") -> str:
         
         elif "building" in query_type.lower() or "hq" in query_type.lower():
             buildings_file = f"{data_path}/buildings.json"
+            print(f"📁 Checking buildings file: {buildings_file}")
             if os.path.exists(buildings_file):
                 try:
                     with open(buildings_file, 'r') as f:
-                        buildings = json.load(f)
-                    result["data"] = buildings[:3]  # First 3 buildings
+                        buildings_data = json.load(f)
+                    print(f"📖 Buildings data keys: {list(buildings_data.keys())}")
+                    
+                    # Extract buildings array from the JSON structure
+                    if "buildings" in buildings_data:
+                        buildings_list = buildings_data["buildings"][:5]  # First 5 buildings
+                        result["data"] = buildings_list
+                        print(f"✅ Found {len(buildings_list)} buildings")
+                    else:
+                        result["data"] = buildings_data[:3]  # Fallback if structure is different
+                        
                 except Exception as e:
+                    print(f"❌ Error reading buildings: {e}")
                     result["error"] = f"Error reading buildings: {e}"
+            else:
+                print(f"❌ Buildings file not found: {buildings_file}")
+                result["error"] = "Buildings file not found"
         
         else:
-            # General data listing
+            # Development note: No specific handler for this query type yet
             files = [f for f in os.listdir(data_path) if f.endswith('.json')][:5]
             result["available_files"] = files
-            result["data"] = f"Available data types: {', '.join(files)}"
+            result["data"] = f"[DEV NOTE] No specific data handler implemented for '{query_type}' yet. Available data files: {', '.join(files)}. Currently only heroes and buildings have specific handlers."
+            result["development_status"] = "incomplete_handler"
         
         return json.dumps(result, indent=2)
         
@@ -86,7 +101,7 @@ tool_definitions = [
         "type": "function",
         "function": {
             "name": "get_lastz_data",
-            "description": "Get Last Z game data including heroes, buildings, equipment, and strategy information. Call this when users ask about game content.",
+            "description": "Get Last Z game data from local files. Currently implemented: 'heroes' (reads hero JSON files), 'buildings' (reads buildings.json). Other types return development notes. IMPORTANT: If the tool returns a '[DEV NOTE]' message, relay this information to the user to explain current implementation status.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -167,7 +182,7 @@ class LastZMinimalBot(fp.PoeBot):
         return fp.SettingsResponse(
             server_bot_dependencies={"GPT-5": 1},
             allow_attachments=False,
-            introduction_message=f"Last Z Assistant V7.5 ({deploy_time}) - Hash: {deploy_hash[:4]}\n\n🎯 Last Z strategy helper with tool calling\n\nI can access live game data about heroes, buildings, and equipment. Just ask naturally about any Last Z topic!\n\n💡 Try: 'What heroes are available?' or 'Tell me about headquarters upgrades'"
+            introduction_message=f"Last Z Assistant V7.5 ({deploy_time}) - Hash: {deploy_hash[:4]}\n\n🧪 DEVELOPMENT VERSION - Tool calling POC\n\n✅ Currently working: Heroes and Buildings data\n🔧 In development: Equipment, Strategy, and other data types\n\nI'll let you know when I'm accessing real data vs when features are still being built!\n\n💡 Try: 'What heroes are available?' or 'Tell me about buildings'"
         )
 
 # Modal setup with local data mounting
