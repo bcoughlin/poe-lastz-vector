@@ -1,5 +1,5 @@
 """
-Last Z: Survival Shooter Assistant V7.2 - Clean Tool-Based Architecture
+Last Z: Survival Shooter Assistant V7 - Clean Tool-Based Architecture
 Pure GPT-5 tool calling for intelligent player data management.
 No manual extraction - 100% LLM-driven with vector search.
 """
@@ -18,7 +18,7 @@ import fastapi_poe as fp
 deploy_hash = hashlib.md5(str(datetime.now().timestamp()).encode()).hexdigest()[:6]
 
 # Modal app
-app = modal.App(f"poe-lastz-v7-2-{deploy_hash}")
+app = modal.App(f"poe-lastz-v7-{deploy_hash}")
 
 # Dependencies
 image = modal.Image.debian_slim().pip_install([
@@ -76,7 +76,7 @@ class LastZCleanBot(fp.PoeBot):
         """Bot settings with clean tool definitions."""
         return fp.SettingsResponse(
             server_bot_dependencies={"GPT-5": 1},
-            introduction_message=f"""🎮 **Last Z Expert V7.2** (Hash: {deploy_hash[:4]})
+            introduction_message=f"""🎮 **Last Z Expert V7** (Hash: {deploy_hash[:4]})
 
 **Pure Tool-Based Architecture:**
 - 🧠 **Smart data extraction** - GPT-5 detects player info naturally
@@ -105,7 +105,7 @@ Just chat normally - I'll intelligently track your progress and give personalize
 
     def extract_player_data(self, **kwargs) -> str:
         """Extract and update player information from conversation context."""
-        # For v7.2, we'll use a simplified in-memory approach
+        # For v7, we'll use a simplified in-memory approach
         summary_parts = []
         if kwargs.get("gamertag"):
             summary_parts.append(f"🎮 Player: {kwargs['gamertag']}")
