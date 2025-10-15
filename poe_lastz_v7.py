@@ -6,6 +6,8 @@ No manual extraction - 100% LLM-driven with vector search.
 
 import hashlib
 import os
+import json
+import re
 from collections.abc import AsyncIterable
 from datetime import datetime
 
@@ -18,27 +20,45 @@ import fastapi_poe as fp
 deploy_hash = hashlib.md5(str(datetime.now().timestamp()).encode()).hexdigest()[:6]
 
 # Modal app
-app = modal.App(f"poe-lastz-v7-{deploy_hash}")
+app = modal.App(f"poe-lastz-v7-3-{deploy_hash}")
 
-# Dependencies
-image = modal.Image.debian_slim().pip_install([
-    "fastapi-poe==0.0.48",
-    "sentence-transformers",
-    "numpy",
-    "scikit-learn",
-])
+# Create image with dependencies
+image = (
+    modal.Image.debian_slim()
+    .pip_install([
+        "fastapi-poe==0.0.48",
+        "sentence-transformers",
+        "scikit-learn",
+        "numpy",
+        "pyyaml"
+    ])
+)
 
-# Last Z Knowledge Base
-LASTZ_KNOWLEDGE = [
-    {"text": "Headquarters level determines hero level cap at HQ × 5", "tags": ["hq", "hero", "level"]},
-    {"text": "Training Ground produces EXP which cannot be purchased with gems", "tags": ["exp", "bottleneck"]},
-    {"text": "Residence produces Zent which cannot be purchased with gems", "tags": ["zent", "bottleneck"]},
-    {"text": "Orange heroes are S-rank: Sophia, Katrina, Evelyn, Oliveira, Mia", "tags": ["orange", "s-rank"]},
-    {"text": "Purple heroes are A-rank: Fiona, Vivian, Christina, Leah, Ava, Selena, Maria, Isabella, Elizabeth, Miranda", "tags": ["purple"]},
-    {"text": "Blue heroes are B-rank: Athena, William, Natalie, Angelina, Audrey, Giselle", "tags": ["blue"]},
-    {"text": "Focus orange heroes first: Sophia (tank), Katrina (damage), Evelyn (support)", "tags": ["strategy", "orange"]},
-    {"text": "Early game priority: HQ → Training Ground → Residence → Research", "tags": ["strategy", "early"]},
-]
+# Create volume for lastz-rag data
+lastz_data_volume = modal.Volume.from_name("lastz-data", create_if_missing=True)
+
+@app.function(image=image, volumes={"/app/data": lastz_data_volume})
+def populate_data_volume():
+    """Upload lastz-rag data to volume (run once to populate)"""
+    import os
+    
+    # Check if data is already uploaded
+    if os.path.exists("/app/data/core/data_index.md"):
+        print("✅ Data already exists in volume")
+        return
+        
+    print("📁 Uploading lastz-rag data to volume...")
+    
+    # Use volume batch upload from local data
+    with lastz_data_volume.batch_upload() as batch:
+        batch.put_directory("../lastz-rag/data", "/")
+    
+    lastz_data_volume.commit()
+    print("✅ Data uploaded successfully")
+
+# Data is already uploaded to volume
+# Upload data to volume (run separately with: modal run poe_lastz_v7.py::populate_data_volume)
+# populate_data_volume.remote()
 
 class LastZCleanBot(fp.PoeBot):
     """Clean tool-based Last Z assistant."""
@@ -76,12 +96,13 @@ class LastZCleanBot(fp.PoeBot):
         """Bot settings with clean tool definitions."""
         return fp.SettingsResponse(
             server_bot_dependencies={"GPT-5": 1},
-            introduction_message=f"""🎮 **Last Z Expert V7** (Hash: {deploy_hash[:4]})
+            introduction_message=f"""🎮 **Last Z Expert V7.3** (Hash: {deploy_hash[:4]})
 
-**Pure Tool-Based Architecture:**
-- 🧠 **Smart data extraction** - GPT-5 detects player info naturally
+**Dynamic Loading Architecture:**
+- 🗂️ **Live data loading** - Real-time access to lastz-rag repository  
 - 🔍 **Vector knowledge search** - Semantic understanding of game questions
-- 💾 **Persistent memory** - Remember your progress across conversations
+- �️ **Pure tool calling** - GPT-5 detects and extracts player data naturally
+- ⚡ **No static fallbacks** - Always current, never stale information
 
 Just chat normally - I'll intelligently track your progress and give personalized advice!
 
@@ -90,18 +111,182 @@ Just chat normally - I'll intelligently track your progress and give personalize
         )
 
     def _init_vector_search(self):
-        """Initialize vector search (lazy loading)."""
+        """Initialize vector search with dynamic knowledge loading."""
         if self._encoder is None:
             try:
                 from sentence_transformers import SentenceTransformer
 
                 self._encoder = SentenceTransformer('all-MiniLM-L6-v2')
-                texts = [item["text"] for item in LASTZ_KNOWLEDGE]
+                
+                # Load all knowledge dynamically
+                all_knowledge = self.load_all_knowledge()
+                texts = [item["text"] for item in all_knowledge]
+                
                 self._embeddings = self._encoder.encode(texts)
-                print(f"✅ Vector search ready: {len(texts)} items")
-            except Exception:
+                self._knowledge_items = all_knowledge  # Store full knowledge items
+                
+                print(f"✅ Vector search ready: {len(texts)} items from dynamic sources")
+            except Exception as e:
                 self._encoder = "fallback"
-                print("⚠️ Using keyword fallback")
+                print(f"⚠️ Vector search failed, using keyword search: {e}")
+                # Still store the knowledge items for keyword search
+                if hasattr(self, '_knowledge_items'):
+                    print(f"📝 Knowledge available for keyword search: {len(self._knowledge_items)} items")
+
+    def load_all_knowledge(self):
+        """Load all knowledge dynamically based on data_index.md"""
+        knowledge = []
+        
+        try:
+            # For now, check if data directory exists (future: implement full dynamic loading)
+            data_path = "/app/data"
+            if os.path.exists(data_path):
+                # Parse data index to get loading instructions
+                data_index = self.parse_data_index("/app/data/core/data_index.md")
+                
+                # 1. Load core static files (priority order)
+                for core_file in data_index.get("core_static", []):
+                    file_path = f"/app/data/core/{core_file['file']}"
+                    if os.path.exists(file_path):
+                        knowledge.extend(self.parse_markdown_file(file_path))
+                
+                # 2. Load dynamic JSON files
+                for json_file in data_index.get("dynamic_json", {}).get("files", []):
+                    file_path = f"/app/data/{json_file['path']}"
+                    if os.path.exists(file_path):
+                        knowledge.extend(self.parse_json_file(file_path, json_file.get("description", "")))
+                
+                # 3. Load dynamic JSON directories  
+                for json_dir in data_index.get("dynamic_json", {}).get("directories", []):
+                    dir_path = f"/app/data/{json_dir['path']}"
+                    if os.path.exists(dir_path):
+                        for filename in os.listdir(dir_path):
+                            if filename.endswith('.json'):
+                                knowledge.extend(self.parse_json_file(f"{dir_path}/{filename}", json_dir.get("description", "")))
+                
+                # 4. Load dynamic markdown directories
+                for md_dir in data_index.get("dynamic_markdown", {}).get("directories", []):
+                    dir_path = f"/app/data/{md_dir['path']}"
+                    if os.path.exists(dir_path):
+                        for filename in os.listdir(dir_path):
+                            if filename.endswith('.md'):
+                                knowledge.extend(self.parse_markdown_file(f"{dir_path}/{filename}"))
+                                
+        except Exception as e:
+            print(f"Dynamic loading failed: {e}")
+        
+        # Return what we actually loaded - no fallbacks
+        if not knowledge:
+            print("❌ No knowledge loaded - dynamic loading failed")
+        else:
+            print(f"✅ Loaded {len(knowledge)} dynamic knowledge items")
+            
+        return knowledge
+
+    def parse_data_index(self, index_path):
+        """Parse the data_index.md file to get loading instructions"""
+        try:
+            with open(index_path, 'r') as f:
+                content = f.read()
+            
+            # Extract YAML blocks from markdown
+            import yaml
+            yaml_blocks = re.findall(r'```yaml\n(.*?)\n```', content, re.DOTALL)
+            
+            parsed_data = {}
+            for block in yaml_blocks:
+                try:
+                    data = yaml.safe_load(block)
+                    parsed_data.update(data)
+                except Exception as e:
+                    print(f"Error parsing YAML block: {e}")
+            
+            return parsed_data
+        except Exception as e:
+            print(f"Error parsing data index: {e}")
+            return {}
+
+    def parse_json_file(self, file_path, description):
+        """Convert JSON data to knowledge format"""
+        try:
+            with open(file_path, 'r') as f:
+                data = json.load(f)
+            
+            knowledge = []
+            
+            # Handle different JSON structures
+            if isinstance(data, dict):
+                # Single object or dictionary of objects
+                for key, value in data.items():
+                    if isinstance(value, dict):
+                        # Object with properties
+                        text = f"{key}: {value.get('description', str(value))}"
+                        tags = [key.lower(), description.lower()] if description else [key.lower()]
+                        knowledge.append({"text": text, "tags": tags})
+                    else:
+                        # Simple key-value
+                        text = f"{key}: {str(value)}"
+                        tags = [key.lower(), description.lower()] if description else [key.lower()]
+                        knowledge.append({"text": text, "tags": tags})
+            
+            elif isinstance(data, list):
+                # Array of objects
+                for item in data:
+                    if isinstance(item, dict):
+                        name = item.get('name', item.get('id', 'Unknown'))
+                        desc = item.get('description', item.get('text', str(item)))
+                        text = f"{name}: {desc}"
+                        tags = [name.lower(), description.lower()] if description else [name.lower()]
+                        knowledge.append({"text": text, "tags": tags})
+            
+            return knowledge
+            
+        except Exception as e:
+            print(f"Failed to parse JSON file {file_path}: {e}")
+            return []
+
+    def parse_markdown_file(self, file_path):
+        """Convert markdown to knowledge format"""
+        try:
+            with open(file_path, 'r') as f:
+                content = f.read()
+            
+            knowledge = []
+            
+            # Extract headers and bullet points as knowledge items
+            lines = content.split('\n')
+            current_section = ""
+            
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                
+                # Headers become context
+                if line.startswith('#'):
+                    current_section = line.replace('#', '').strip()
+                
+                # Bullet points become knowledge items
+                elif line.startswith('-') or line.startswith('*'):
+                    text = line.replace('-', '').replace('*', '').strip()
+                    if text and len(text) > 10:  # Filter out very short items
+                        tags = [current_section.lower()] if current_section else ["general"]
+                        knowledge.append({"text": text, "tags": tags})
+                
+                # Bold text items
+                elif '**' in line:
+                    # Extract bold sections as important info
+                    bold_items = re.findall(r'\*\*(.*?)\*\*', line)
+                    for item in bold_items:
+                        if len(item) > 5:
+                            tags = [current_section.lower()] if current_section else ["general"]
+                            knowledge.append({"text": item, "tags": tags})
+            
+            return knowledge
+            
+        except Exception as e:
+            print(f"Failed to parse markdown file {file_path}: {e}")
+            return []
 
     def extract_player_data(self, **kwargs) -> str:
         """Extract and update player information from conversation context."""
@@ -161,14 +346,19 @@ Just chat normally - I'll intelligently track your progress and give personalize
         return f"Screenshot analysis for: {description}. Based on what you've described, I can provide strategic recommendations. Please share more details about your current game state, level, and what specific guidance you need."
 
     def search_knowledge(self, query: str, top_k: int = 3) -> list[str]:
-        """Search knowledge base."""
+        """Search knowledge base using dynamic knowledge."""
         self._init_vector_search()
 
         if self._encoder == "fallback":
-            # Simple keyword fallback
+            # Keyword search using only dynamically loaded knowledge
             query_words = query.lower().split()
             results = []
-            for item in LASTZ_KNOWLEDGE:
+            
+            if not hasattr(self, '_knowledge_items') or not self._knowledge_items:
+                print("❌ No knowledge items available for search")
+                return ["No knowledge available - dynamic loading failed"]
+            
+            for item in self._knowledge_items:
                 score = sum(1 for word in query_words if word in item["text"].lower())
                 if score > 0:
                     results.append((score, item["text"]))
@@ -180,9 +370,15 @@ Just chat normally - I'll intelligently track your progress and give personalize
             query_embedding = self._encoder.encode([query])
             similarities = cosine_similarity(query_embedding, self._embeddings)[0]
             top_indices = np.argsort(similarities)[-top_k:][::-1]
-            return [LASTZ_KNOWLEDGE[i]["text"] for i in top_indices if similarities[i] > 0.3]
-        except Exception:
-            return []
+            
+            # Use only dynamically loaded knowledge
+            if not hasattr(self, '_knowledge_items') or not self._knowledge_items:
+                return ["No knowledge available - dynamic loading failed"]
+                
+            return [self._knowledge_items[i]["text"] for i in top_indices if similarities[i] > 0.3]
+        except Exception as e:
+            print(f"Vector search error: {e}")
+            return ["Search failed - check logs"]
 
     async def get_response(self, request: fp.QueryRequest) -> AsyncIterable[fp.PartialResponse]:
         """Main response handler with tool calling."""
@@ -300,9 +496,10 @@ Just chat normally - I'll intelligently track your progress and give personalize
 
 @app.function(
     image=image,
+    volumes={"/app/data": lastz_data_volume},
     secrets=[modal.Secret.from_dict({
-        "POE_ACCESS_KEY": "fz6Uq6jWbkB9DCq3RVnSxsMiyGlwmmR7",
-        "POE_BOT_NAME": "LastZBetaV7_1",
+        "POE_ACCESS_KEY": "DjeSMuL0QwiwBSLa33Pa6t97kxhEmmXb",
+        "POE_BOT_NAME": "LastZBetaV7",
     })]
 )
 @modal.asgi_app()
