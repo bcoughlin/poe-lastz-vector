@@ -69,18 +69,70 @@ Just chat normally - I'll intelligently track your progress and give personalize
                     "type": "function",
                     "function": {
                         "name": "update_player_profile",
-                        "description": "Extract and store player information when mentioned in conversation",
+                        "description": "Extract and store comprehensive player information when mentioned in conversation",
                         "parameters": {
                             "type": "object",
                             "properties": {
-                                "gamertag": {"type": "string"},
-                                "server": {"type": "string"},
-                                "hq_level": {"type": "integer"},
-                                "orange_heroes": {"type": "integer"},
-                                "purple_heroes": {"type": "integer"}, 
-                                "blue_heroes": {"type": "integer"},
-                                "current_focus": {"type": "string"},
-                                "bottlenecks": {"type": "array", "items": {"type": "string"}}
+                                "account": {
+                                    "type": "object",
+                                    "properties": {
+                                        "name": {"type": "string", "description": "Gamertag/player name"},
+                                        "level": {"type": "integer"},
+                                        "power": {"type": "integer"},
+                                        "alliance": {
+                                            "type": "object",
+                                            "properties": {
+                                                "name": {"type": "string"},
+                                                "rank": {"type": "string"}
+                                            }
+                                        }
+                                    }
+                                },
+                                "progression": {
+                                    "type": "object", 
+                                    "properties": {
+                                        "hq_level": {"type": "integer"},
+                                        "exploration": {
+                                            "type": "object",
+                                            "properties": {
+                                                "chapter": {"type": "integer"},
+                                                "stage_cleared": {"type": "integer"}
+                                            }
+                                        }
+                                    }
+                                },
+                                "resources": {
+                                    "type": "object",
+                                    "properties": {
+                                        "food": {"type": "integer"},
+                                        "wood": {"type": "integer"},
+                                        "zent": {"type": "integer"},
+                                        "diamonds": {"type": "integer"}
+                                    }
+                                },
+                                "heroes": {
+                                    "type": "object",
+                                    "properties": {
+                                        "roster_size": {"type": "integer"},
+                                        "owned": {"type": "array", "items": {"type": "string"}},
+                                        "highest_rarity": {"type": "string"}
+                                    }
+                                },
+                                "buildings": {
+                                    "type": "object",
+                                    "properties": {
+                                        "hq": {"type": "integer"},
+                                        "training_ground": {"type": "integer"},
+                                        "residence": {"type": "integer"}
+                                    }
+                                },
+                                "meta": {
+                                    "type": "object",
+                                    "properties": {
+                                        "days_played": {"type": "integer"},
+                                        "vip_level": {"type": "integer"}
+                                    }
+                                }
                             }
                         }
                     }
@@ -136,24 +188,83 @@ Just chat normally - I'll intelligently track your progress and give personalize
                 if tool_call.function.name == "update_player_profile":
                     args = json.loads(tool_call.function.arguments)
                     
-                    # Store player data using DataResponse
+                    # Load existing profile or create from template
+                    try:
+                        data_response = await fp.get_final_response(
+                            fp.QueryRequest(
+                                query=[fp.ProtocolMessage(role="user", content="get_profile")],
+                                user_id=request.user_id,
+                                conversation_id=request.conversation_id,
+                            )
+                        )
+                        if hasattr(data_response, 'data') and data_response.data:
+                            profile_data = json.loads(data_response.data)
+                            profile = profile_data.get("player_profile", {})
+                        else:
+                            # Initialize with comprehensive template
+                            template = {
+                                "account": {"id": None, "name": None, "level": None, "power": None, "alliance": {"id": None, "name": None, "rank": None, "activity_level": None}},
+                                "progression": {"hq_level": None, "exploration": {"chapter": None, "stage_cleared": None, "stars_total": None}, "reclaim_areas": [], "formations_unlocked": None, "troop_tier_unlocked": None, "research_progress": None},
+                                "resources": {"food": None, "wood": None, "zent": None, "exp_items": None, "alloy": None, "energy": {"current": None, "max": None, "usage_focus": None}, "sweep_tickets": None, "diamonds": None},
+                                "heroes": {"roster_size": None, "owned": [], "highest_rarity": None, "average_level": None, "star_distribution": {"1_star": None, "2_star": None, "3_star": None, "4_star": None, "5_star": None}, "roster": []},
+                                "troops": {"assaulters": {"tier": None, "count": None}, "shooters": {"tier": None, "count": None}, "riders": {"tier": None, "count": None}, "training_focus": None},
+                                "buildings": {"hq": None, "training_ground": None, "farmhouse": None, "lumberyard": None, "residence": None, "hospital": None, "laboratory": None, "club": None, "arena": None, "building_focus": None},
+                                "social": {"friends": None, "recent_rallies": None, "pvp_rank_arena": None, "chat_channels_joined": [], "event_participation": None},
+                                "meta": {"days_played": None, "login_streak": None, "vip_level": None, "spending_bracket": None},
+                                "combat_stats": {"kill_points": None, "deaths": None}
+                            }
+                            profile = template
+                    except:
+                        # Initialize with comprehensive template on any error  
+                        template = {
+                            "account": {"id": None, "name": None, "level": None, "power": None, "alliance": {"id": None, "name": None, "rank": None, "activity_level": None}},
+                            "progression": {"hq_level": None, "exploration": {"chapter": None, "stage_cleared": None, "stars_total": None}, "reclaim_areas": [], "formations_unlocked": None, "troop_tier_unlocked": None, "research_progress": None},
+                            "resources": {"food": None, "wood": None, "zent": None, "exp_items": None, "alloy": None, "energy": {"current": None, "max": None, "usage_focus": None}, "sweep_tickets": None, "diamonds": None},
+                            "heroes": {"roster_size": None, "owned": [], "highest_rarity": None, "average_level": None, "star_distribution": {"1_star": None, "2_star": None, "3_star": None, "4_star": None, "5_star": None}, "roster": []},
+                            "troops": {"assaulters": {"tier": None, "count": None}, "shooters": {"tier": None, "count": None}, "riders": {"tier": None, "count": None}, "training_focus": None},
+                            "buildings": {"hq": None, "training_ground": None, "farmhouse": None, "lumberyard": None, "residence": None, "hospital": None, "laboratory": None, "club": None, "arena": None, "building_focus": None},
+                            "social": {"friends": None, "recent_rallies": None, "pvp_rank_arena": None, "chat_channels_joined": [], "event_participation": None},
+                            "meta": {"days_played": None, "login_streak": None, "vip_level": None, "spending_bracket": None},
+                            "combat_stats": {"kill_points": None, "deaths": None}
+                        }
+                        profile = template
+                    
+                    # Deep update profile with new data (only non-null values)
+                    def deep_update(target, source):
+                        for key, value in source.items():
+                            if value is not None:
+                                if isinstance(value, dict) and key in target and isinstance(target[key], dict):
+                                    deep_update(target[key], value)
+                                else:
+                                    target[key] = value
+                    
+                    deep_update(profile, args)
+                    
+                    profile["last_updated"] = datetime.now().isoformat()
+                    
+                    # Store updated profile using DataResponse
                     try:
                         await fp.post_message_feedback(
                             message_id=request.conversation_id,
                             type=fp.FeedbackType.like,
                             feedback=fp.DataResponse(data=json.dumps({
-                                "player_profile": args,
+                                "player_profile": profile,
                                 "updated": datetime.now().isoformat()
                             }))
                         )
                         
                         # Format confirmation
                         updates = []
-                        if args.get("gamertag"): updates.append(f"🎮 {args['gamertag']}")
-                        if args.get("hq_level"): updates.append(f"🏰 HQ {args['hq_level']}")
-                        if args.get("orange_heroes"): updates.append(f"🟠 {args['orange_heroes']} orange")
+                        if args.get("account", {}).get("name"): 
+                            updates.append(f"🎮 {args['account']['name']}")
+                        if args.get("progression", {}).get("hq_level"): 
+                            updates.append(f"🏰 HQ {args['progression']['hq_level']}")
+                        if args.get("heroes", {}).get("roster_size"): 
+                            updates.append(f"⚔️ {args['heroes']['roster_size']} heroes")
+                        if args.get("account", {}).get("power"): 
+                            updates.append(f"� {args['account']['power']:,} power")
                         
-                        yield fp.PartialResponse(text=f"✅ **Profile Updated!** {' • '.join(updates)}")
+                        yield fp.PartialResponse(text=f"✅ **Profile Updated!** {' • '.join(updates) if updates else 'Data saved'}")
                         
                     except Exception as e:
                         yield fp.PartialResponse(text=f"⚠️ Profile update failed: {e}")

@@ -1,0 +1,107 @@
+{
+  "last_updated": null,
+  "player_profile": {
+    "account": {
+      "id": null,
+      "name": null,
+      "level": null,
+      "power": null,
+      "alliance": {
+        "id": null,
+        "name": null,
+        "rank": null,
+        "activity_level": null
+      }
+    },
+    "progression": {
+      "hq_level": null,
+      "exploration": {
+        "chapter": null,
+        "stage_cleared": null,
+        "stars_total": null
+      },
+      "reclaim_areas": [],
+      "formations_unlocked": null,
+      "troop_tier_unlocked": null,
+      "research_progress": null
+    },
+    "resources": {
+      "food": null,
+      "wood": null,
+      "zent": null,
+      "exp_items": null,
+      "alloy": null,
+      "energy": {
+        "current": null,
+        "max": null,
+        "usage_focus": null
+      },
+      "sweep_tickets": null,
+      "diamonds": null
+    },
+    "heroes": {
+      "roster_size": null,
+      "owned": [],
+      "highest_rarity": null,
+      "average_level": null,
+      "star_distribution": {
+        "1_star": null,
+        "2_star": null,
+        "3_star": null,
+        "4_star": null,
+        "5_star": null
+      },
+      "roster": []
+    },
+    "troops": {
+      "assaulters": {
+        "tier": null,
+        "count": null
+      },
+      "shooters": {
+        "tier": null,
+        "count": null
+      },
+      "riders": {
+        "tier": null,
+        "count": null
+      },
+      "training_focus": null
+    },
+    "buildings": {
+      "hq": null,
+      "training_ground": null,
+      "farmhouse": null,
+      "lumberyard": null,
+      "residence": null,
+      "hospital": null,
+      "laboratory": null,
+      "club": null,
+      "arena": null,
+      "building_focus": null
+    },
+    "social": {
+      "friends": null,
+      "recent_rallies": null,
+      "pvp_rank_arena": null,
+      "chat_channels_joined": [],
+      "event_participation": null
+    },
+    "meta": {
+      "days_played": null,
+      "login_streak": null,
+      "vip_level": null,
+      "spending_bracket": null
+    },
+    "combat_stats": {
+      "kill_points": null,
+      "deaths": null
+    }
+  },
+  "metadata": {
+    "schema_version": "7.1",
+    "created": null,
+    "conversation_count": 0,
+    "data_sources": []
+  }
+}
