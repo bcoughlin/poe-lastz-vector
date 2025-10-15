@@ -32,6 +32,8 @@ This chat mode specializes in developing Poe bots with Modal deployment, focusin
 - **Import Errors**: Check Modal image includes all required packages
 - **Function Not Found**: Ensure function has `@modal.asgi_app()` decorator for web endpoints
 - **Secrets Access**: Environment variables only available inside Modal functions
+- **Endpoint Limits**: Stop old apps before deploying new ones (8 max)
+- **App Management**: `modal app stop <app-name>` - MUST stop one at a time, no batch commands
 
 ### Poe Bot Development Best Practices
 
@@ -131,6 +133,33 @@ return fp.SettingsResponse(
 - Verify tool calling works with actual queries
 - Check Modal logs for encoding errors
 - Validate bot settings sync properly
+
+**Test Endpoint Script:**
+```bash
+# Test settings endpoint
+curl -X POST https://bcoughlin--poe-lastz-v7-1-HASH-fastapi-app.modal.run/ \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ACCESS_KEY" \
+  -d '{"version": "1.0", "type": "settings"}'
+
+# Test query endpoint
+curl -X POST https://bcoughlin--poe-lastz-v7-1-HASH-fastapi-app.modal.run/ \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ACCESS_KEY" \
+  -d '{
+    "version": "1.0",
+    "type": "query",
+    "user_id": "test_user_123",
+    "conversation_id": "test_conv_456", 
+    "message_id": "test_msg_789",
+    "query": [{"role": "user", "content": "I need help with headquarters upgrades"}]
+  }' | head -10
+```
+
+**CRITICAL VERSION NAMING:**
+- ❌ **NEVER use "clean" in version names** - causes deployment confusion
+- ✅ **ONLY use minor versions**: v7.1, v7.2, v7.3, etc.
+- ✅ **Pattern**: `poe_lastz_v7_1.py` → `f"poe-lastz-v7-1-{deploy_hash}"`
 
 ### Response Architecture
 
