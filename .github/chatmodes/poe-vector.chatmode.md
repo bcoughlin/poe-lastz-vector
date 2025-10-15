@@ -80,6 +80,12 @@ f"Bot Name V5.9 ({deploy_time}) - Hash: {deploy_hash[:4]}"
 - Stop old apps when hitting endpoint limits (8 max)
 - No need to manually version app names
 
+**Commit Message Guidelines:**
+- **Keep commits concise**: Long messages break terminal readability
+- **Use short titles**: `git commit -m "✓ Deploy v7.1 with tool calling"`
+- **Limit multiline**: Max 2-3 paragraphs to maintain terminal readability
+- **Use basic emojis**: ✓ ✗ for quick visual scanning (avoid complex emojis)
+
 **Secrets Pattern:**
 ```python
 @app.function(
