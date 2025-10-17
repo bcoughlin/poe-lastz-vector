@@ -510,6 +510,25 @@ def analyze_lastz_screenshot(image_description, user_query):
         return json.dumps({"error": str(e)})
 
 
+def load_prompt_file(filename):
+    """Load system prompt from file at build time"""
+    try:
+        # Use relative path from the current file location
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        prompt_path = os.path.join(current_dir, "prompts", filename)
+        with open(prompt_path, 'r', encoding='utf-8') as f:
+            return f.read().strip()
+    except Exception as e:
+        print(f"⚠️ Failed to load prompt file {filename}: {e}")
+        # Fallback to basic prompt
+        return "You are a Last Z strategy expert. Keep responses brief and helpful."
+
+
+# Load prompts at build time
+SYSTEM_PROMPT_IMAGE = load_prompt_file("system_prompt_image.md")
+SYSTEM_PROMPT_TEXT = load_prompt_file("system_prompt_text.md")
+
+
 # Tool function that GPT can call for regular knowledge search
 
 
@@ -688,12 +707,12 @@ class LastZImageBot(fp.PoeBot):
             if has_images:
                 system_message = fp.ProtocolMessage(
                     role="system",
-                    content="You are a Last Z strategy expert. KEEP RESPONSES BRIEF AND POINT-EFFICIENT - users have limited daily budgets. Give 2-3 key points max, then ask 'Want me to dive deeper?' ALWAYS use analyze_lastz_screenshot for images. If you cannot identify specific hero names from screenshots, say: 'I can see game elements but need clearer hero names. Can you provide a screenshot with names visible?' Include 1-2 source citations max."
+                    content=SYSTEM_PROMPT_IMAGE
                 )
             else:
                 system_message = fp.ProtocolMessage(
                     role="system",
-                    content="You are a Last Z strategy expert. KEEP RESPONSES BRIEF AND POINT-EFFICIENT - users have limited daily budgets. Give 2-3 key points max, then ask 'Want me to dive deeper?' ALWAYS use search_lastz_knowledge for questions about heroes, buildings, strategy, or game mechanics. Include 1-2 source citations max."
+                    content=SYSTEM_PROMPT_TEXT
                 )
 
             # Insert system message at the beginning

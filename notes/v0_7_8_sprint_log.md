@@ -51,6 +51,45 @@
 - 📖 Readability: 2-3 key points vs overwhelming paragraphs
 - 🔄 Follow-up: Users can request deeper analysis if needed
 
+## 🔧 **Prompt File Separation - October 17, 2025**
+
+### **PM Input**
+> "ok i think it's time to put the prompt in a discrete file so i can clearly read it and track git history. is that possible?"
+> "i don't think i want to mount it, can we import it at build time?"
+
+### **Implementation Applied**
+- **Created prompt files**: 
+  - `prompts/system_prompt_image.txt` - For screenshot analysis
+  - `prompts/system_prompt_text.txt` - For text-only queries
+- **Build-time loading**: Prompts loaded as constants during app initialization
+- **No runtime overhead**: No file I/O during request processing
+- **Version control**: Prompts now trackable in git history
+- **Maintainability**: Edit prompts without touching Python code
+
+### **Code Changes**
+- Added `load_prompt_file()` function with fallback handling
+- Created `SYSTEM_PROMPT_IMAGE` and `SYSTEM_PROMPT_TEXT` constants
+- Updated system message creation to use pre-loaded prompts
+- Removed hardcoded prompt strings from main code
+
+## 🚫 **Citation Guardrails - October 17, 2025**
+
+### **PM Input**
+> "so we need guardrails around citations as we discussed"
+
+### **Implementation Applied**
+- **Updated prompt files**: Added explicit citation rules to prevent hallucination
+- **Strict source requirements**: "ONLY cite sources from your tool search results"
+- **Exact format mandated**: Use `hero_katrina.json (hero, 0.876)` format only
+- **Banned fake sources**: "NEVER make up sources like 'community testing' or 'in-game descriptions'"
+- **Fallback instruction**: "If no tool results, say 'No specific sources found'"
+- **Content restrictions**: "Base ALL advice on tool results ONLY. Do NOT add information from your training data"
+
+### **Problem Addressed**
+- Bot was citing fake sources: "in-game Katrina skill descriptions; community testing compilations (Sept–Oct 2025)"
+- Users received false confidence in recommendations
+- Need to ensure citations match actual knowledge base files
+
 ---
 
 ## 📋 **Todo**
