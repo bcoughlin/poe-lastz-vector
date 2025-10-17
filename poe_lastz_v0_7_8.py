@@ -483,9 +483,12 @@ def analyze_lastz_screenshot(image_description, user_query):
         combined_query = f"{user_query} {image_description}"
         knowledge_results = vector_search.vector_search(combined_query)
 
+        # Limit results for point efficiency - top 3 most relevant only
+        knowledge_results = knowledge_results[:3]
+
         # Create citations from knowledge search
         citations = []
-        for item in knowledge_results[:5]:  # Top 5 knowledge matches
+        for item in knowledge_results:  # Use all limited results
             score = item.get('similarity_score', item.get('keyword_score', 0))
             citations.append(f"{item['name']} ({item['type']}, {score:.3f})")
 
@@ -529,11 +532,11 @@ def search_lastz_knowledge(user_query):
         # Perform optimized vector search
         results = vector_search.vector_search(user_query)
 
-        # Smart result limiting for performance
-        if len(results) > 50:
+        # Smart result limiting for point efficiency
+        if len(results) > 3:
             print(
-                f"📊 Large result set ({len(results)}), limiting to top 50 for GPT processing")
-            results = results[:50]
+                f"📊 Large result set ({len(results)}), limiting to top 3 for point efficiency")
+            results = results[:3]
 
         if not results:
             return json.dumps({
@@ -561,9 +564,9 @@ def search_lastz_knowledge(user_query):
 
             formatted_results.append(result_item)
 
-        # Create debug citations
+        # Create debug citations - limit for point efficiency
         citations = []
-        for item in results[:10]:  # Top 10 for citations
+        for item in results:  # Use all limited results (max 3)
             score = item.get('similarity_score', item.get('keyword_score', 0))
             citations.append(f"{item['name']} ({item['type']}, {score:.3f})")
 
@@ -685,12 +688,12 @@ class LastZImageBot(fp.PoeBot):
             if has_images:
                 system_message = fp.ProtocolMessage(
                     role="system",
-                    content="You are a Last Z strategy expert with image analysis capabilities. ALWAYS use the analyze_lastz_screenshot tool when users upload screenshots. If you cannot identify specific hero names from a screenshot, be honest and say: 'I can see what appears to be a game screen, but I cannot identify specific hero names from this screenshot. Could you provide a screenshot with hero names clearly visible, or tell me which heroes you have?' Only give specific hero recommendations if you can clearly identify hero names. ALWAYS use search_lastz_knowledge for any text questions. Always include citations from your knowledge search."
+                    content="You are a Last Z strategy expert. KEEP RESPONSES BRIEF AND POINT-EFFICIENT - users have limited daily budgets. Give 2-3 key points max, then ask 'Want me to dive deeper?' ALWAYS use analyze_lastz_screenshot for images. If you cannot identify specific hero names from screenshots, say: 'I can see game elements but need clearer hero names. Can you provide a screenshot with names visible?' Include 1-2 source citations max."
                 )
             else:
                 system_message = fp.ProtocolMessage(
                     role="system",
-                    content="You are a Last Z strategy expert. ALWAYS use search_lastz_knowledge for ANY questions about heroes, buildings, strategy, game mechanics, or LastZ content. Call the tool first, then provide helpful advice based on the search results. Include debug citations at the end."
+                    content="You are a Last Z strategy expert. KEEP RESPONSES BRIEF AND POINT-EFFICIENT - users have limited daily budgets. Give 2-3 key points max, then ask 'Want me to dive deeper?' ALWAYS use search_lastz_knowledge for questions about heroes, buildings, strategy, or game mechanics. Include 1-2 source citations max."
                 )
 
             # Insert system message at the beginning
