@@ -90,6 +90,43 @@
 - Users received false confidence in recommendations
 - Need to ensure citations match actual knowledge base files
 
+## 🚨 **Hallucination Detection & Tool Calling Fix - October 17, 2025**
+
+### **PM Input**
+> "this looks like pure hullucination: https://poe.com/s/EHwFhw0pVkr40mGPfYZA i need to be able to tell if hallucinations are occurring in the chat response (debug footer)"
+
+### **Issue Discovered**
+- Bot responses contained pure hallucination without using knowledge base
+- No way to detect when tools weren't being called
+- GPT-5 wasn't calling `search_lastz_knowledge` despite system prompt instructions
+
+### **PM Follow-up Input**
+> "no tools called"
+
+### **Root Cause Identified**
+- Prompts loading during build time but failing at Modal runtime
+- Fallback prompts were too basic: "You are a Last Z strategy expert. Keep responses brief and helpful."
+- Missing critical "ALWAYS use search_lastz_knowledge" instruction in fallbacks
+
+### **Implementation Applied**
+- **Debug tracking system**: Added global `debug_tracker` to monitor tool usage
+- **Enhanced tool logging**: Both tools now log when called and results returned
+- **Debug footer**: Shows `🔧 Tools called: search_lastz_knowledge | 📊 Results: 3` or `🚨 NO TOOLS CALLED - POTENTIAL HALLUCINATION`
+- **Improved fallback prompts**: Include "ALWAYS use" instructions even when .md files fail to load
+- **Path troubleshooting**: Added `/root/prompts/` path and detailed error logging
+
+### **Technical Changes**
+- Added `debug_tracker` global variable with `tools_called`, `results_returned`, `last_query`
+- Updated both `search_lastz_knowledge` and `analyze_lastz_screenshot` to log usage
+- Enhanced response streaming to append debug footer
+- Improved `load_prompt_file()` with better fallbacks containing tool usage instructions
+
+### **Result**
+- ✅ Tool calling now works correctly
+- 🔍 Debug footer provides immediate feedback on tool usage
+- 🚫 Hallucination detection in real-time
+- 📊 Users can see exactly which tools were called and how many results returned
+
 ---
 
 ## 📋 **Todo**
@@ -97,4 +134,4 @@
 - Deploy simplified v0.7.8 and test with hero screenshots
 - Verify GPT provides conservative responses when hero names unclear
 - Test knowledge citations in responses
-- **🚨 Deploy point-efficient version and test cost reduction**
+- **✅ Deploy point-efficient version and test cost reduction - COMPLETE**

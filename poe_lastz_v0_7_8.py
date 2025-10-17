@@ -462,6 +462,13 @@ class LastZVectorSearch:
 # Global search instance
 vector_search = LastZVectorSearch()
 
+# Debug tracking for hallucination detection
+debug_tracker = {
+    "tools_called": [],
+    "results_returned": 0,
+    "last_query": ""
+}
+
 # NEW v0.7.8: Image analysis tool
 
 
@@ -479,14 +486,18 @@ def analyze_lastz_screenshot(image_description, user_query):
     try:
         print(f"🖼️ Image analysis tool called: '{user_query}' with image")
 
+        # Track tool usage for debug
+        debug_tracker["tools_called"].append("analyze_lastz_screenshot")
+        debug_tracker["last_query"] = user_query
+
         # Do vector search based on user query to get relevant knowledge
         combined_query = f"{user_query} {image_description}"
         knowledge_results = vector_search.vector_search(combined_query)
 
         # Limit results for point efficiency - top 3 most relevant only
         knowledge_results = knowledge_results[:3]
-
         # Create citations from knowledge search
+        debug_tracker["results_returned"] = len(knowledge_results)
         citations = []
         for item in knowledge_results:  # Use all limited results
             score = item.get('similarity_score', item.get('keyword_score', 0))
@@ -511,20 +522,45 @@ def analyze_lastz_screenshot(image_description, user_query):
 
 
 def load_prompt_file(filename):
-    """Load system prompt from file at build time"""
+    """Load system prompt from file - mirrors data loading approach"""
     try:
-        # Use relative path from the current file location
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        prompt_path = os.path.join(current_dir, "prompts", filename)
-        with open(prompt_path, 'r', encoding='utf-8') as f:
-            return f.read().strip()
+        # Mirror the data loading approach - try /app/prompts first (Modal mount)
+        paths_to_try = [
+            f"/app/prompts/{filename}",  # Modal mount path (like /app/data)
+            f"/root/prompts/{filename}",  # Modal container runtime path
+            os.path.join(os.path.dirname(__file__), "prompts",
+                         filename),  # Relative to script
+            os.path.join("prompts", filename),  # Current working directory
+        ]
+
+        for prompt_path in paths_to_try:
+            if os.path.exists(prompt_path):
+                with open(prompt_path, 'r', encoding='utf-8') as f:
+                    content = f.read().strip()
+                    print(f"✅ Loaded prompt from: {prompt_path}")
+                    return content
+
+        print(f"❌ Prompt file {filename} not found in any expected location")
+        print(f"🔍 Tried paths: {paths_to_try}")
+
+        # Use embedded fallback with proper instructions
+        if "image" in filename:
+            return """You are a Last Z strategy expert with image analysis capabilities.
+KEEP RESPONSES BRIEF AND POINT-EFFICIENT - users have limited daily budgets.
+ALWAYS use analyze_lastz_screenshot for images.
+ONLY cite sources from your tool search results."""
+        else:
+            return """You are a Last Z strategy expert.
+KEEP RESPONSES BRIEF AND POINT-EFFICIENT - users have limited daily budgets.
+ALWAYS use search_lastz_knowledge for questions about heroes, buildings, strategy, or game mechanics.
+ONLY cite sources from your tool search results."""
+
     except Exception as e:
         print(f"⚠️ Failed to load prompt file {filename}: {e}")
-        # Fallback to basic prompt
         return "You are a Last Z strategy expert. Keep responses brief and helpful."
 
 
-# Load prompts at build time
+# Load prompts at import time
 SYSTEM_PROMPT_IMAGE = load_prompt_file("system_prompt_image.md")
 SYSTEM_PROMPT_TEXT = load_prompt_file("system_prompt_text.md")
 
@@ -545,7 +581,12 @@ def search_lastz_knowledge(user_query):
     try:
         print(f"🔧 Vector search tool called: '{user_query}'")
 
+        # Track tool usage for debug
+        debug_tracker["tools_called"].append("search_lastz_knowledge")
+        debug_tracker["last_query"] = user_query
+
         if not vector_search.knowledge_items:
+            debug_tracker["results_returned"] = 0
             return json.dumps({"error": "No knowledge data loaded"})
 
         # Perform optimized vector search
@@ -556,6 +597,8 @@ def search_lastz_knowledge(user_query):
             print(
                 f"📊 Large result set ({len(results)}), limiting to top 3 for point efficiency")
             results = results[:3]
+
+        debug_tracker["results_returned"] = len(results)
 
         if not results:
             return json.dumps({
@@ -736,6 +779,9 @@ class LastZImageBot(fp.PoeBot):
             sanitized_request = request
 
         # Stream with enhanced tool calling (image + vector search)
+        tool_calls_made = []
+        response_chunks = []
+
         async for msg in fp.stream_request(  # type: ignore
             sanitized_request,
             "GPT-5",
@@ -743,7 +789,41 @@ class LastZImageBot(fp.PoeBot):
             tools=tool_definitions_fp,
             tool_executables=tool_executables,
         ):
+            # Track tool calls for debugging
+            if hasattr(msg, 'is_suggested_reply') and not msg.is_suggested_reply:
+                if hasattr(msg, 'text') and msg.text:
+                    response_chunks.append(msg.text)
+
+            # Check for tool call completions (they show up in logs but not easily accessible)
+            # We'll add debug footer at the end
             yield msg
+
+        # Add debug footer if we have response content
+        if response_chunks:
+            debug_info = []
+            if debug_tracker["tools_called"]:
+                tools_called = ", ".join(debug_tracker["tools_called"])
+                debug_info.append(f"🔧 Tools called: {tools_called}")
+                debug_info.append(
+                    f"📊 Results: {debug_tracker['results_returned']}")
+            else:
+                debug_info.append(
+                    "🚨 NO TOOLS CALLED - POTENTIAL HALLUCINATION")
+
+            debug_info.append(f"🖼️ Has images: {has_images}")
+
+            debug_footer = f"\n\n---\n*Debug: {' | '.join(debug_info)}*"
+
+            # Reset debug tracker for next request
+            debug_tracker["tools_called"] = []
+            debug_tracker["results_returned"] = 0
+            debug_tracker["last_query"] = ""
+
+            yield fp.PartialResponse(
+                text=debug_footer,
+                is_suggested_reply=False,
+                is_replace_response=False
+            )
 
     async def get_settings(self, setting):
         return fp.SettingsResponse(
