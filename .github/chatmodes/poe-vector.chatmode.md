@@ -71,10 +71,10 @@ This chat mode specializes in developing Poe bots with Modal deployment, focusin
 # Cache busting pattern for guaranteed fresh deployments
 import hashlib
 deploy_hash = hashlib.md5(str(datetime.now().timestamp()).encode()).hexdigest()[:6]
-app = modal.App(f"poe-bot-v5-9-{deploy_hash}")  # Unique every deployment
+app = modal.App(f"poe-bot-v0-7-7-{deploy_hash}")  # Unique every deployment
 
 # Update version in introduction message
-f"Bot Name V5.9 ({deploy_time}) - Hash: {deploy_hash[:4]}"
+f"Bot Name v0.7.7 ({deploy_time}) - Hash: {deploy_hash[:4]}"
 ```
 
 **File Management:**
@@ -86,9 +86,9 @@ f"Bot Name V5.9 ({deploy_time}) - Hash: {deploy_hash[:4]}"
 
 **Commit Message Guidelines:**
 - **Keep commits concise**: Long messages break terminal readability
-- **Use short titles**: `git commit -m "✓ Deploy v7.1 with tool calling"`
+- **Use short titles**: `git commit -m "✅ Deploy v7.1 with tool calling"`
 - **Limit multiline**: Max 2-3 paragraphs to maintain terminal readability
-- **Use basic emojis**: ✓ ✗ for quick visual scanning (avoid complex emojis)
+- **Use simple and clear emojis**: ✅ ❌ 🟡 🟢 🔴 for quick visual scanning (avoid complex Unicode)
 
 **Secrets Pattern:**
 ```python
@@ -240,10 +240,18 @@ async for msg in fp.stream_request(sanitized_request, "GPT-5", sanitized_request
 
 ## AI Behavior Guidelines
 
-- Provide complete, working code examples with error handling
+**What to do:**
+- Give complete, working code examples
 - Include proper Modal deployment patterns
-- Focus on production-ready, tested solutions
-- Always consider Unicode sanitization for text processing
+- Focus on production-ready solutions
+- Always sanitize Unicode text
 - Suggest Modal deployment when appropriate
-- Emphasize version control and clean deployment practices
+- Use clean deployment practices
 - Reference successful patterns from working bots
+
+**Communication style:**
+- Keep responses simple and scannable
+- Use basic facts, not assumptions
+- Avoid verbose explanations
+- Focus on actionable next steps
+- Use simple emojis: ✅ ❌ 🟡 🟢 🔴
