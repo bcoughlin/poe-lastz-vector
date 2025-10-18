@@ -16,7 +16,7 @@ import fastapi_poe as fp
 # Generate hash for cache busting
 deploy_hash = hashlib.md5(
     str(datetime.now().timestamp()).encode()).hexdigest()[:6]
-deploy_time = datetime.now().strftime("%H:%M")
+deploy_time = datetime.now().strftime("%m%d%H%M")
 
 # Bot credentials
 bot_access_key = "QxXYsepAwwQJg7kIOpTAf0mD9kTpvknZ"
@@ -501,7 +501,9 @@ def analyze_lastz_screenshot(image_description, user_query):
         citations = []
         for item in knowledge_results:  # Use all limited results
             score = item.get('similarity_score', item.get('keyword_score', 0))
-            citations.append(f"{item['name']} ({item['type']}, {score:.3f})")
+            # Use actual filename instead of friendly title
+            filename = item.get('data', {}).get('filename', item['name'])
+            citations.append(f"{filename} ({item['type']}, {score:.3f})")
 
         citation_text = "\n\n---\nSources: " + \
             " • ".join(citations) if citations else ""
@@ -544,15 +546,10 @@ def load_prompt_file(filename):
         print(f"🔍 Tried paths: {paths_to_try}")
 
         # Use embedded fallback with proper instructions
-        if "image" in filename:
-            return """You are a Last Z strategy expert with image analysis capabilities.
-KEEP RESPONSES BRIEF AND POINT-EFFICIENT - users have limited daily budgets.
-ALWAYS use analyze_lastz_screenshot for images.
-ONLY cite sources from your tool search results."""
-        else:
-            return """You are a Last Z strategy expert.
+        return """You are a Last Z strategy expert.
 KEEP RESPONSES BRIEF AND POINT-EFFICIENT - users have limited daily budgets.
 ALWAYS use search_lastz_knowledge for questions about heroes, buildings, strategy, or game mechanics.
+ALWAYS use analyze_lastz_screenshot for images.
 ONLY cite sources from your tool search results."""
 
     except Exception as e:
@@ -560,9 +557,8 @@ ONLY cite sources from your tool search results."""
         return "You are a Last Z strategy expert. Keep responses brief and helpful."
 
 
-# Load prompts at import time
-SYSTEM_PROMPT_IMAGE = load_prompt_file("system_prompt_image.md")
-SYSTEM_PROMPT_TEXT = load_prompt_file("system_prompt_text.md")
+# Load single unified prompt at import time
+SYSTEM_PROMPT = load_prompt_file("system_prompt.md")
 
 
 # Tool function that GPT can call for regular knowledge search
@@ -630,7 +626,9 @@ def search_lastz_knowledge(user_query):
         citations = []
         for item in results:  # Use all limited results (max 3)
             score = item.get('similarity_score', item.get('keyword_score', 0))
-            citations.append(f"{item['name']} ({item['type']}, {score:.3f})")
+            # Use actual filename instead of friendly title
+            filename = item.get('data', {}).get('filename', item['name'])
+            citations.append(f"{filename} ({item['type']}, {score:.3f})")
 
         citation_text = "\n\n---\nSources: " + " • ".join(citations)
 
@@ -746,17 +744,11 @@ class LastZImageBot(fp.PoeBot):
                     attachments=msg.attachments  # Preserve attachments
                 ))
 
-            # Add enhanced system message for image + text analysis
-            if has_images:
-                system_message = fp.ProtocolMessage(
-                    role="system",
-                    content=SYSTEM_PROMPT_IMAGE
-                )
-            else:
-                system_message = fp.ProtocolMessage(
-                    role="system",
-                    content=SYSTEM_PROMPT_TEXT
-                )
+            # Add enhanced system message for all queries
+            system_message = fp.ProtocolMessage(
+                role="system",
+                content=SYSTEM_PROMPT
+            )
 
             # Insert system message at the beginning
             sanitized_query.insert(0, system_message)
@@ -766,6 +758,8 @@ class LastZImageBot(fp.PoeBot):
             print(
                 f"🔧 Available tools: {[tool.__name__ for tool in tool_executables]}")
 
+            # Configure temperature for consistent structured responses
+            # 0.0 = fully deterministic for testing/dev phase
             sanitized_request = fp.QueryRequest(
                 version=request.version,
                 type=request.type,
@@ -773,7 +767,8 @@ class LastZImageBot(fp.PoeBot):
                 user_id=request.user_id,
                 conversation_id=request.conversation_id,
                 message_id=request.message_id,
-                access_key=request.access_key
+                access_key=request.access_key,
+                temperature=0.0  # Deterministic responses for testing consistency
             )
         else:
             sanitized_request = request
@@ -830,7 +825,7 @@ class LastZImageBot(fp.PoeBot):
             server_bot_dependencies={"GPT-5": 1},
             allow_attachments=True,           # ✅ NEW: Enable image uploads
             enable_image_comprehension=True,  # ✅ NEW: Auto image analysis
-            introduction_message=f"Hey there, survivor. How can I help you power up in Last Z: Survival Shooter? Ask me anything. First off, what is your gamertag and headquarters level?\n\n---\n*Last Z Assistant v0.7.8 ({deploy_time}) - Hash: {deploy_hash[:4]}*"
+            introduction_message=f"Hey there, survivor. How can I help you power up in Last Z: Survival Shooter? Ask me anything. First off, what is your gamertag and headquarters level?\n\n---\n*Last Z Assistant v0.7.8 ({deploy_time}-{deploy_hash[:4]})*"
         )
 
 

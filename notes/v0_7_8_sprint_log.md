@@ -127,11 +127,84 @@
 - 🚫 Hallucination detection in real-time
 - 📊 Users can see exactly which tools were called and how many results returned
 
+## 🔗 **Citation Format Fix - October 18, 2025**
+
+### **PM Input**
+> "ok because this doesn't show the files and lines: `Sources: What Is Last Z: Survival Shooter (Core Guide); Last Z: Terminology & Definitions (Core Guide)`"
+
+### **Implementation Applied**
+- **Fixed citation format**: Changed from friendly titles to actual filenames
+- **Added similarity scores**: Now shows `game_fundamentals.md (core, 0.876)` instead of generic titles
+- **Enhanced transparency**: Users can verify which specific knowledge base files were used
+- **Updated both tools**: `search_lastz_knowledge` and `analyze_lastz_screenshot` now use `item.get('data', {}).get('filename', item['name'])`
+
+## 📅 **Timestamp Format Updates - October 18, 2025**
+
+### **PM Input**
+> "the hash in the debug message shows just hours/minutes. can that be a timestamp that inludes month/day?"
+
+### **PM Follow-up Input**
+> "instead of the hash at the end, format like (10.18 09:36 {hash})"
+
+### **PM Final Input**
+> "actually so it is obfuscated, do (mmddhhmm-{hash})"
+
+### **Implementation Applied**
+- **Enhanced timestamp**: Changed from `(09:36)` to full date format
+- **Obfuscated format**: Final format `(10180936-b148)` packs month/day/hour/minute + hash
+- **Better tracking**: Can identify deployment timing without obvious timestamp appearance
+
+## � **DRY Principle - Prompt Consolidation - October 18, 2025**
+
+### **PM Input**
+> "these are so similar, we don't want to maintai both, following DRY principle"
+
+### **Implementation Applied**
+- **Consolidated prompts**: Merged `system_prompt_image.md` and `system_prompt_text.md` into single `system_prompt.md`
+- **Eliminated duplication**: Removed nearly identical content across two files
+- **Unified instructions**: Single prompt handles both text and image queries
+- **Simplified maintenance**: One file to update instead of two
+- **Updated code**: Removed separate `SYSTEM_PROMPT_IMAGE` and `SYSTEM_PROMPT_TEXT` constants
+
+---
+
+## 📔 **Predefined Interactions & Temperature Configuration - October 18, 2025**
+
+### ✅ Iteration 8: Predefined Interactions & Conversation Flow (14:18)
+
+**User Request**: Define structured interaction patterns for hero analysis
+- Added "Predefined Interactions" section to system_prompt.md
+- Defined hero analysis conversation flow with greeting/analysis/suggestions structure
+- Enhanced prompt with specific conversation patterns for better consistency
+- Temperature setting investigation: Found QueryRequest.temperature field exists
+
+**Status**: Predefined interactions implemented ✅  
+
+### ✅ Iteration 9: Temperature Configuration (14:21)
+
+**PM Insight**: Configure GPT-5 temperature for consistent structured interactions
+- Added `temperature=0.5` to QueryRequest for balanced consistency
+- 0.5 provides good balance between creativity and consistency for hero analysis flows
+- Added explanatory comments about temperature choice for structured responses
+- Default was None, now explicitly set for predictable interaction patterns
+
+**PM Update**: Set to deterministic `0.0` for testing/dev phase
+- Changed from 0.5 to 0.0 for fully deterministic responses during evaluation
+- Allows consistent testing of predefined interaction patterns
+- Will help validate structured conversation flows work reliably
+
+**Technical Details**:
+- QueryRequest.temperature field confirmed to exist in fastapi-poe
+- Set to 0.0: fully deterministic for testing consistency
+- Applied to all queries for consistent conversation flow behavior
+
+**Status**: Temperature configuration complete ✅  
+
 ---
 
 ## 📋 **Todo**
 
-- Deploy simplified v0.7.8 and test with hero screenshots
-- Verify GPT provides conservative responses when hero names unclear
-- Test knowledge citations in responses
+- Deploy v0.7.8 with temperature configuration and test structured interactions
+- Verify hero analysis follows predefined conversation flow patterns
+- Test temperature impact on response consistency vs creativity balance
 - **✅ Deploy point-efficient version and test cost reduction - COMPLETE**
