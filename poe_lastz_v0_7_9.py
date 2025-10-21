@@ -1,6 +1,6 @@
 """
-Last Z: Assistant v0.7.8 - Vector Embeddings + Image Analysis
-Adds multi-modal capabilities for analyzing LastZ game screenshots.
+Last Z: Assistant v0.7.9 - Vector Embeddings + Image Analysis + GPT-5-chat-latest
+Optimized with gpt-5-chat-latest for engaging personality and better responses.
 """
 
 import hashlib
@@ -561,7 +561,7 @@ ONLY cite sources from your tool search results."""
 
 
 # Load single unified prompt at import time
-SYSTEM_PROMPT = load_prompt_file("system_prompt.md")
+SYSTEM_PROMPT = load_prompt_file("bot_prompt_v2.md")
 
 
 # Tool function that GPT can call for regular knowledge search
@@ -774,7 +774,7 @@ class LastZImageBot(fp.PoeBot):
             print(
                 f"🔧 Available tools: {[tool.__name__ for tool in tool_executables]}")
 
-            # Configure temperature for engaging personality while maintaining accuracy
+            # Configure for maximum personality with GPT-5
             sanitized_request = fp.QueryRequest(
                 version=request.version,
                 type=request.type,
@@ -783,7 +783,7 @@ class LastZImageBot(fp.PoeBot):
                 conversation_id=request.conversation_id,
                 message_id=request.message_id,
                 access_key=request.access_key,
-                temperature=0.7  # Sweet spot for personality + accuracy
+                temperature=0.9  # High temperature for maximum personality
             )
         else:
             sanitized_request = request
@@ -794,7 +794,7 @@ class LastZImageBot(fp.PoeBot):
 
         async for msg in fp.stream_request(  # type: ignore
             sanitized_request,
-            "GPT-5-mini",
+            "GPT-5-Chat",
             request.access_key,
             tools=tool_definitions_fp,
             tool_executables=tool_executables,
@@ -857,7 +857,7 @@ class LastZImageBot(fp.PoeBot):
 
     async def get_settings(self, setting):
         return fp.SettingsResponse(
-            server_bot_dependencies={"GPT-5-mini": 1},
+            server_bot_dependencies={"GPT-5-Chat": 1},
             allow_attachments=True,           # ✅ NEW: Enable image uploads
             enable_image_comprehension=True,  # ✅ NEW: Auto image analysis
             introduction_message="Hey there, survivor! 🎮 How can I help you power up in Last Z: Survival Shooter? Ask me anything about heroes, buildings, strategy, or upload screenshots for analysis! 🧟‍♂️💥"
@@ -874,8 +874,12 @@ image = (
         "/Users/bradleycoughlin/local_code/lastz-rag/data",
         remote_path="/app/data"
     )
+    .add_local_dir(
+        "/Users/bradleycoughlin/local_code/poe-lastz-vector/prompts",
+        remote_path="/app/prompts"
+    )
 )
-app = App(f"poe-lastz-v0-7-8-{deploy_hash}")
+app = App(f"poe-lastz-v0-7-9-{deploy_hash}")
 
 
 @app.function(
