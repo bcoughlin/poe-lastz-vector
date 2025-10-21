@@ -1,6 +1,6 @@
 ---
 description: 'Poe bot development with Modal deployment best practices'
-tools: ['edit', 'runNotebooks', 'search', 'new', 'runCommands', 'runTasks', 'claude-context/*', 'extensions', 'usages', 'vscodeAPI', 'think', 'problems', 'changes', 'testFailure', 'openSimpleBrowser', 'fetch', 'githubRepo', 'todos']
+tools: ['edit', 'runNotebooks', 'search', 'new', 'runCommands', 'runTasks', 'claude-context/*', 'usages', 'vscodeAPI', 'think', 'problems', 'changes', 'testFailure', 'openSimpleBrowser', 'fetch', 'githubRepo', 'todos']
 ---
 
 # Poe Bot Development Best Practices

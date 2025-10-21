@@ -466,7 +466,9 @@ vector_search = LastZVectorSearch()
 debug_tracker = {
     "tools_called": [],
     "results_returned": 0,
-    "last_query": ""
+    "last_query": "",
+    "dev_mode": False,  # Toggled by "baxter" passphrase
+    "sources": []  # Store source citations for footer
 }
 
 # NEW v0.7.8: Image analysis tool
@@ -496,26 +498,26 @@ def analyze_lastz_screenshot(image_description, user_query):
 
         # Limit results for point efficiency - top 3 most relevant only
         knowledge_results = knowledge_results[:3]
-        # Create citations from knowledge search
+        # Store citations for debug footer (only in dev mode)
         debug_tracker["results_returned"] = len(knowledge_results)
-        citations = []
-        for item in knowledge_results:  # Use all limited results
-            score = item.get('similarity_score', item.get('keyword_score', 0))
-            # Use actual filename instead of friendly title
-            filename = item.get('data', {}).get('filename', item['name'])
-            citations.append(f"{filename} ({item['type']}, {score:.3f})")
 
-        citation_text = "\n\n---\nSources: " + \
-            " • ".join(citations) if citations else ""
+        if debug_tracker["dev_mode"]:
+            citations = []
+            for item in knowledge_results:  # Use all limited results
+                score = item.get('similarity_score',
+                                 item.get('keyword_score', 0))
+                filename = item.get('data', {}).get('filename', item['name'])
+                citations.append(f"{filename} ({item['type']}, {score:.3f})")
+            debug_tracker["sources"] = citations
 
-        # Return the raw data for GPT to analyze
+        citation_text = ""  # No inline citations - all in footer
+
+        # Return the raw data for GPT to analyze (no citation fields - all in footer)
         return json.dumps({
             "image_description": image_description,
             "user_query": user_query,
             "knowledge_results": knowledge_results,
-            "citations": citation_text,
-            "analysis_type": "screenshot_with_knowledge",
-            "debug_citations": citation_text
+            "analysis_type": "screenshot_with_knowledge"
         }, indent=2)
 
     except Exception as e:
@@ -622,22 +624,23 @@ def search_lastz_knowledge(user_query):
 
             formatted_results.append(result_item)
 
-        # Create debug citations - limit for point efficiency
-        citations = []
-        for item in results:  # Use all limited results (max 3)
-            score = item.get('similarity_score', item.get('keyword_score', 0))
-            # Use actual filename instead of friendly title
-            filename = item.get('data', {}).get('filename', item['name'])
-            citations.append(f"{filename} ({item['type']}, {score:.3f})")
+        # Store citations for debug footer (only in dev mode)
+        if debug_tracker["dev_mode"]:
+            citations = []
+            for item in results:  # Use all limited results (max 3)
+                score = item.get('similarity_score',
+                                 item.get('keyword_score', 0))
+                filename = item.get('data', {}).get('filename', item['name'])
+                citations.append(f"{filename} ({item['type']}, {score:.3f})")
+            debug_tracker["sources"] = citations
 
-        citation_text = "\n\n---\nSources: " + " • ".join(citations)
+        citation_text = ""  # No inline citations - all in footer
 
         return json.dumps({
             "query": user_query,
             "results_count": len(formatted_results),
             "search_method": "vector" if vector_search.embeddings is not None else "keyword_fallback",
-            "results": formatted_results,
-            "debug_citations": citation_text
+            "results": formatted_results
         }, indent=2)
 
     except Exception as e:
@@ -733,6 +736,18 @@ class LastZImageBot(fp.PoeBot):
                         image_content += f"\nImage Analysis: {attachment.parsed_content}"
                         print("🖼️ Found image attachment with parsed content")
 
+        # Check for dev mode passphrase "baxter"
+        user_messages = [msg for msg in request.query if msg.role == "user"]
+        is_passphrase_only = False
+        if user_messages:
+            latest_user_message = user_messages[-1].content.lower().strip()
+            if latest_user_message == "baxter":
+                # Pure passphrase - toggle and return without processing
+                debug_tracker["dev_mode"] = not debug_tracker["dev_mode"]
+                mode_status = "ON" if debug_tracker["dev_mode"] else "OFF"
+                yield fp.PartialResponse(text=f"🔧 Dev mode {mode_status}")
+                return
+
         # Sanitize the user message
         if request.query:
             sanitized_query = []
@@ -793,8 +808,17 @@ class LastZImageBot(fp.PoeBot):
             # We'll add debug footer at the end
             yield msg
 
-        # Add debug footer if we have response content
-        if response_chunks:
+        # Add debug footer only if dev mode is enabled and we have response content
+        if response_chunks and debug_tracker["dev_mode"]:
+            footer_sections = []
+
+            # Add sources section
+            if debug_tracker["sources"]:
+                sources_text = "Sources: " + \
+                    " • ".join(debug_tracker["sources"])
+                footer_sections.append(sources_text)
+
+            # Add debug info section
             debug_info = []
             if debug_tracker["tools_called"]:
                 tools_called = ", ".join(debug_tracker["tools_called"])
@@ -806,19 +830,30 @@ class LastZImageBot(fp.PoeBot):
                     "🚨 NO TOOLS CALLED - POTENTIAL HALLUCINATION")
 
             debug_info.append(f"🖼️ Has images: {has_images}")
+            debug_info.append(f"🧑‍💻 Dev mode: ON")
 
-            debug_footer = f"\n\n---\n*Debug: {' | '.join(debug_info)}*"
+            footer_sections.append(f"Debug: {' | '.join(debug_info)}")
 
-            # Reset debug tracker for next request
+            debug_footer = f"\n\n---\n*{chr(10).join(footer_sections)}*"
+
+            # Reset debug tracker for next request (but keep dev_mode persistent)
             debug_tracker["tools_called"] = []
             debug_tracker["results_returned"] = 0
             debug_tracker["last_query"] = ""
+            debug_tracker["sources"] = []
+            # Note: dev_mode persists across requests until toggled with "baxter"
 
             yield fp.PartialResponse(
                 text=debug_footer,
                 is_suggested_reply=False,
                 is_replace_response=False
             )
+        else:
+            # Reset debug tracker even when dev mode is off
+            debug_tracker["tools_called"] = []
+            debug_tracker["results_returned"] = 0
+            debug_tracker["last_query"] = ""
+            debug_tracker["sources"] = []
 
     async def get_settings(self, setting):
         return fp.SettingsResponse(

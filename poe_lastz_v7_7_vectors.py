@@ -606,7 +606,7 @@ class LastZEmbeddingsBot(fp.PoeBot):
         # Stream with vector search tool calling
         async for msg in fp.stream_request(
             sanitized_request,
-            "GPT-5",
+            "GPT-5-mini",
             request.access_key,
             tools=tool_definitions_fp,
             tool_executables=tool_executables,
@@ -615,9 +615,9 @@ class LastZEmbeddingsBot(fp.PoeBot):
 
     async def get_settings(self, setting: fp.SettingsRequest) -> fp.SettingsResponse:
         return fp.SettingsResponse(
-            server_bot_dependencies={"GPT-5": 1},
+            server_bot_dependencies={"GPT-5-mini": 1},
             allow_attachments=False,
-            introduction_message=f"Last Z Assistant V7.7 ({deploy_time}) - Hash: {deploy_hash[:4]}\n\n🧠 TRUE VECTOR EMBEDDINGS with Semantic Search\n\n✅ AI-powered semantic understanding:\n• Heroes (roles, skills, strategies)\n• Buildings (scaling, synergies)\n• Equipment (optimal loadouts)\n\n🔍 Finds conceptually related information, not just keywords!\n🎯 Includes similarity scores for transparency\n\n💡 Try: 'Early game tank strategy' or 'Heroes that synergize with resource buildings'"
+            introduction_message=f"Last Z Assistant V7.7 ({deploy_time}) - Hash: {deploy_hash[:4]}\n\n🧠 TRUE VECTOR EMBEDDINGS with Semantic Search\n\n✅ AI-powered semantic understanding:\n• Heroes (roles, skills, strategies)\n• Buildings (scaling, synergies)\n• Equipment (optimal loadouts)\n\n🔍 Finds conceptually related information, not just keywords!\n🎯 Includes similarity scores for transparency\n⚡ Powered by GPT-5-mini for speed & efficiency!\n\n💡 Try: 'Early game tank strategy' or 'Heroes that synergize with resource buildings'"
         )
 
 # Modal setup with vector embeddings - OPTIMIZED FOR PERFORMANCE

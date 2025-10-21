@@ -200,11 +200,29 @@
 
 **Status**: Temperature configuration complete ✅  
 
+### ✅ Iteration 10: Dev Mode with Passphrase (14:30)
+
+**PM Request**: Add dev mode triggered by "baxter" passphrase for debugging
+- Added `dev_mode` flag to debug_tracker (persistent across requests)
+- Passphrase detection: "baxter" toggles dev mode ON/OFF with confirmation
+- **Normal mode**: Clean responses with NO citations (user-friendly)
+- **Dev mode**: Detailed citations with similarity scores and debug footer
+- Debug footer only shows in dev mode: `🔧 Tools called | 📊 Results | 🖼️ Has images | 🧑‍💻 Dev mode: ON`
+
+**Technical Implementation**:
+- Passphrase detection in user messages before query processing
+- Toggle feedback: `🔧 Dev mode ON` / `🔧 Dev mode OFF`
+- Conditional citation formatting: detailed vs minimal
+- Debug footer conditional on `debug_tracker["dev_mode"]`
+- Dev mode persists until toggled again
+
+**Status**: Dev mode with passphrase complete ✅  
+
 ---
 
 ## 📋 **Todo**
 
-- Deploy v0.7.8 with temperature configuration and test structured interactions
-- Verify hero analysis follows predefined conversation flow patterns
-- Test temperature impact on response consistency vs creativity balance
+- Deploy v0.7.8 with dev mode and test "baxter" passphrase toggle
+- Verify normal mode shows minimal citations without debug footer
+- Test dev mode shows detailed debugging information with scores
 - **✅ Deploy point-efficient version and test cost reduction - COMPLETE**
