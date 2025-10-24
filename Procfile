@@ -1,0 +1,1 @@
+web: python -m uvicorn poe_lastz_v0_8_1:app --host 0.0.0.0 --port $PORT

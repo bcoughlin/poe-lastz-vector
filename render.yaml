@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: lastz-bot-v0-8-1
+    env: python
+    buildCommand: pip install -r requirements_render.txt
+    startCommand: python -m uvicorn poe_lastz_v0_8_1:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: POE_ACCESS_KEY
+        sync: false  # Set manually in Render dashboard
+      - key: POE_BOT_NAME
+        sync: false  # Set manually in Render dashboard
+      - key: DATA_STORAGE_PATH
+        value: /tmp/lastz_data
+    instanceType: starter
+    healthCheckPath: /health
