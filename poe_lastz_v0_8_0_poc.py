@@ -9,12 +9,13 @@ import json
 import os
 import time
 import hashlib
+import requests
 from datetime import datetime
 from typing import AsyncIterator, Dict, Any, List, Optional
 
 import modal
 import fastapi_poe as fp
-from modal import App, Image, asgi_app
+from modal import App, Image, asgi_app, Volume
 from sentence_transformers import SentenceTransformer
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
@@ -24,10 +25,13 @@ deploy_hash = hashlib.md5(str(datetime.now().timestamp()).encode()).hexdigest()[
 deploy_time = datetime.now().strftime("%Y-%m-%d %H:%M")
 
 # Dependencies for Modal - using exact working versions from v0.7.9
-REQUIREMENTS = ["fastapi-poe", "numpy", "scikit-learn", "sentence-transformers", "torch"]
+REQUIREMENTS = ["fastapi-poe", "numpy", "scikit-learn", "sentence-transformers", "torch", "requests"]
 
 print(f"🚀 Last Z Bot v0.8.0 POC - {deploy_time}")
 print(f"🔑 Deploy hash: {deploy_hash}")
+
+# Create Modal Volume for persistent data storage
+volume = Volume.from_name("lastz-data-collection", create_if_missing=True)
 
 # Data collection schema for POC
 def create_interaction_log(
@@ -38,6 +42,7 @@ def create_interaction_log(
     bot_response: str,
     has_images: bool = False,
     image_count: int = 0,
+    image_data: List[Dict[str, Any]] = None,
     tool_calls: List[str] = None,
     response_time: float = 0.0
 ) -> Dict[str, Any]:
@@ -54,6 +59,7 @@ def create_interaction_log(
             "user_message_length": len(user_message),
             "has_images": has_images,
             "image_count": image_count,
+            "image_data": image_data or [],
             "bot_response": bot_response,
             "bot_response_length": len(bot_response),
             "response_time_ms": round(response_time * 1000, 2)
@@ -74,10 +80,65 @@ def log_interaction_to_console(interaction_data: Dict[str, Any]):
     print(f"👤 User ID: {interaction_data['session_info']['user_id']}")
     print(f"💬 Message: {interaction_data['interaction']['user_message'][:100]}...")
     print(f"🖼️  Images: {interaction_data['interaction']['image_count']}")
+    if interaction_data['interaction']['image_data']:
+        for i, img in enumerate(interaction_data['interaction']['image_data']):
+            print(f"   Image {i+1}: {img.get('content_type', 'unknown')} - {img.get('name', 'unnamed')}")
     print(f"🔧 Tools: {', '.join(interaction_data['metadata']['tool_calls'])}")
     print(f"⏱️  Response Time: {interaction_data['interaction']['response_time_ms']}ms")
     print(f"📝 Response Length: {interaction_data['interaction']['bot_response_length']} chars")
     print("="*80)
+
+def store_interaction_data(interaction_data: Dict[str, Any], volume_path: str = "/app/storage/interactions") -> bool:
+    """Store interaction data to Modal Volume"""
+    try:
+        # Create filename with timestamp and message ID
+        timestamp = interaction_data['timestamp'].replace(':', '-').replace('.', '-')
+        message_id = interaction_data['session_info']['message_id']
+        filename = f"interaction_{timestamp}_{message_id}.json"
+        
+        # Ensure directory exists
+        os.makedirs(volume_path, exist_ok=True)
+        
+        # Write interaction data
+        filepath = os.path.join(volume_path, filename)
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(interaction_data, f, indent=2, ensure_ascii=False)
+        
+        print(f"✅ Stored interaction data: {filepath}")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Failed to store interaction data: {e}")
+        return False
+
+def download_and_store_image(image_url: str, image_name: str, user_id: str, message_id: str, volume_path: str = "/app/storage/images") -> Optional[str]:
+    """Download image from URL and store to Modal Volume"""
+    try:
+        print(f"📥 Attempting to download image: {image_url}")
+        
+        # Make request to download image
+        response = requests.get(image_url, timeout=30)
+        response.raise_for_status()
+        
+        # Create safe filename
+        safe_name = "".join(c for c in image_name if c.isalnum() or c in ('_', '-', '.'))
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{user_id}_{message_id}_{timestamp}_{safe_name}"
+        
+        # Ensure directory exists
+        os.makedirs(volume_path, exist_ok=True)
+        
+        # Write image data
+        filepath = os.path.join(volume_path, filename)
+        with open(filepath, 'wb') as f:
+            f.write(response.content)
+        
+        print(f"✅ Downloaded and stored image: {filepath} ({len(response.content)} bytes)")
+        return filepath
+        
+    except Exception as e:
+        print(f"❌ Failed to download image: {e}")
+        return None
 
 # Load system prompt from file
 def load_prompt_file(filename: str) -> str:
@@ -235,6 +296,7 @@ class LastZBot(fp.PoeBot):
         user_message = ""
         has_images = False
         image_count = 0
+        image_data = []
         
         if request.query:
             latest_message = request.query[-1]
@@ -266,13 +328,31 @@ class LastZBot(fp.PoeBot):
                             print(f"       No type attribute: {dir(content_part)}")
                     user_message = " ".join(text_parts)
             
-            # Also check for attachments
+            # Also check for attachments and extract detailed info
             if hasattr(latest_message, 'attachments') and latest_message.attachments:
                 print(f"   - Attachments found: {len(latest_message.attachments)}")
                 for i, attachment in enumerate(latest_message.attachments):
-                    print(f"     Attachment {i}: {type(attachment)}, {dir(attachment)}")
+                    print(f"     Attachment {i}: {type(attachment)}")
+                    
+                    # Extract attachment data
+                    attachment_info = {
+                        "index": i,
+                        "content_type": getattr(attachment, 'content_type', None),
+                        "name": getattr(attachment, 'name', None),
+                        "url": getattr(attachment, 'url', None),
+                        "size": getattr(attachment, 'size', None),
+                        "parsed_content": getattr(attachment, 'parsed_content', None)
+                    }
+                    
+                    # Log all available attributes for debugging
+                    print(f"       Content Type: {attachment_info['content_type']}")
+                    print(f"       Name: {attachment_info['name']}")
+                    print(f"       URL: {attachment_info['url']}")
+                    print(f"       Size: {attachment_info['size']}")
+                    
+                    image_data.append(attachment_info)
                     has_images = True
-                    image_count += len(latest_message.attachments)
+                    image_count += 1
         
         print(f"🔧 Processing query with {len(request.query)} messages, has_images: {has_images}")
         
@@ -325,6 +405,21 @@ class LastZBot(fp.PoeBot):
         response_time = time.time() - start_time
         bot_response = "".join(bot_response_parts)
         
+        # Try to download and store images if URLs are available
+        for img_info in image_data:
+            if img_info.get('url') and img_info.get('name'):
+                try:
+                    stored_path = download_and_store_image(
+                        img_info['url'], 
+                        img_info['name'], 
+                        user_id, 
+                        message_id
+                    )
+                    if stored_path:
+                        img_info['stored_path'] = stored_path
+                except Exception as e:
+                    print(f"❌ Error downloading image: {e}")
+        
         # Create and log interaction data (POC)
         interaction_data = create_interaction_log(
             user_id=user_id,
@@ -334,6 +429,7 @@ class LastZBot(fp.PoeBot):
             bot_response=bot_response,
             has_images=has_images,
             image_count=image_count,
+            image_data=image_data,
             tool_calls=tool_calls_made,
             response_time=response_time
         )
@@ -341,7 +437,8 @@ class LastZBot(fp.PoeBot):
         # Log to console for POC testing
         log_interaction_to_console(interaction_data)
         
-        # TODO v0.8.0: Store interaction_data to Modal Volume or external storage
+        # Store interaction data to Modal Volume
+        store_interaction_data(interaction_data)
 
     async def get_settings(self, setting: fp.SettingsRequest) -> fp.SettingsResponse:
         return fp.SettingsResponse(
@@ -373,6 +470,7 @@ app = App(f"poe-lastz-v0-8-0-poc-{deploy_hash}")
     min_containers=1,  # Keep 1 instance warm
     timeout=300,  # 5 minute timeout
     scaledown_window=600,  # Keep container alive 10 minutes
+    volumes={"/app/storage": volume},  # Mount volume for data storage
     secrets=[
         modal.Secret.from_dict({
             "POE_ACCESS_KEY": "IpiGBRb3KqHt2sEdMRlaJ8Dt8C7SNIog",
