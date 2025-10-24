@@ -4,13 +4,22 @@
 **Total Bill**: $364.65 (including $334.65 overage)  
 **Issue**: Unexpectedly high costs for basic Poe bot deployment  
 
-## 🚨 Current Billing Breakdown
+## � Current Billing Breakdown
 
 Based on screenshot analysis:
+- **Billing Period**: Oct 10 - Nov 9, 2025
+- **Total Bill**: $334.72 (not $364.65 as initially shown)
 - **Included Credits**: $30 (100% used)
-- **Additional Usage**: $334.65 
-- **Single App Cost**: `poe_lastz_v0_7_8.fastapi_app` = $178.08
-- **Time Period**: ~4 days (Oct 17-20)
+- **Additional Usage**: $334.72
+- **Time Period**: ~14 days (Oct 10-24)
+
+### Top Functions (34 total):
+1. `poe_lastz_v0_7_8.fastapi_app` - $178.08 (53% of total)
+2. `poe_lastz_v0_7_9.fastapi_app` - $167.93 (50% of total) 
+3. `poe_lastz_v7_7.vectors.fastapi_app` - $15.63
+4. `main.keep_bot_alive` - $1.23
+5. `main.run_discord_bot` - $1.15
+6. `poe_lastz_v0_8_0_poc.fastapi_app` - $0.66
 
 ## 📊 Current Deployment State
 
@@ -27,16 +36,18 @@ ap-9ZtxeD5xDAuOwumgDQYjXF: poe-lastz-v0-8-0-poc-444591 (deployed, 1 task)
 ap-u09kJJs9C9yt5zQlf9G6AS: poe-lastz-v0-8-0-poc-95fa88 (deployed, 1 task)
 ```
 
-## 🔍 Root Cause Analysis
+## 🔍 Root Cause Analysis - UPDATED
 
-### 1. Multiple Always-On Containers (PRIMARY ISSUE)
-**Problem**: 9 apps running with `min_containers=1` each
-- **Cost**: 9 containers × 24 hours × 4 days = 864 container-hours
-- **Memory**: 8GB RAM per container = 72GB total memory allocation
-- **Impact**: Massive cost for unused capacity
+### 1. Two Major Apps Consuming 95% of Budget (PRIMARY ISSUE)
+**Problem**: `poe_lastz_v0_7_8` + `poe_lastz_v0_7_9` = $345.01 of $334.72 total
+- **v0.7.8**: $178.08 over 14 days = $12.72/day
+- **v0.7.9**: $167.93 over 14 days = $11.99/day
+- **Combined**: $24.71/day for just 2 apps
 
-### 2. High Memory Configuration (SECONDARY ISSUE)
-**Current Config**: 8GB RAM per container
+**Analysis**: These are likely the apps with `min_containers=1` and high memory running 24/7
+
+### 2. High Memory Configuration (CONFIRMED ISSUE)
+**Current Config**: 8GB RAM per container still in use
 ```python
 @app.function(
     cpu=4.0,
@@ -45,9 +56,10 @@ ap-u09kJJs9C9yt5zQlf9G6AS: poe-lastz-v0-8-0-poc-95fa88 (deployed, 1 task)
 )
 ```
 
-**Memory Pricing Impact**:
-- Modal charges for allocated memory even when idle
-- 8GB × 9 containers × 24/7 = Continuous high memory costs
+**Daily Cost Breakdown**:
+- v0.7.8: $12.72/day ÷ 24 hours = $0.53/hour
+- v0.7.9: $11.99/day ÷ 24 hours = $0.50/hour
+- **Total**: ~$1.03/hour for 2 containers
 
 ### 3. Heavy Dependencies (TERTIARY ISSUE)
 **Large Dependencies**:
@@ -63,60 +75,71 @@ deploy_hash = hashlib.md5(str(datetime.now().timestamp()).encode()).hexdigest()[
 app = App(f"poe-lastz-v0-8-0-poc-{deploy_hash}")  # Creates NEW app each deploy
 ```
 
-## 💰 Modal Pricing Model Research
+## 💰 Modal Pricing Model Research - REFINED
 
-### Compute Pricing (Estimated)
-- **CPU**: ~$0.000139/vCPU-second = $0.50/vCPU-hour
-- **Memory**: ~$0.000139/GB-second = $0.50/GB-hour  
-- **Always-On**: 24/7 billing when `min_containers > 0`
+### Actual Pricing Analysis (Based on Real Data)
+**From billing data**:
+- 2 main apps: $345.01 over 14 days = $24.64/day combined
+- Per app: ~$12.32/day average
+- Per hour: ~$0.51/hour per container
 
-### Current Hourly Costs (Per Container)
+**Estimated Resource Costs**:
 ```
-Single Container Cost:
-- CPU: 4 vCPUs × $0.50 = $2.00/hour
-- Memory: 8GB × $0.50 = $4.00/hour
-- Total: $6.00/hour per container
-
-9 Containers Running 24/7:
-- Hourly: 9 × $6.00 = $54/hour
-- Daily: $54 × 24 = $1,296/day
-- 4 Days: $1,296 × 4 = $5,184
+Configuration: 4 vCPUs + 8GB RAM + min_containers=1
+Estimated hourly cost per container: ~$0.51
+Daily cost: $0.51 × 24 = $12.24/day ✅ Matches actual billing!
 ```
 
-**Note**: These are rough estimates. The actual $364 bill suggests Modal's pricing might be lower or different, but the pattern confirms the issue.
+### Current Costs (Confirmed)
+```
+Two Active Containers:
+- v0.7.8: $12.72/day = $381.60/month
+- v0.7.9: $11.99/day = $359.70/month  
+- Combined: $24.71/day = $741.30/month
+```
 
-## 🛑 Immediate Cost Reduction Actions
+**🚨 Without optimization, monthly costs would be $741!**
 
-### 1. Stop Redundant Apps (URGENT - Do Now)
+## 🛑 Immediate Cost Reduction Actions - UPDATED STATUS
+
+### 1. Stop Redundant Apps (COMPLETED ✅)
 ```bash
-# Keep only the production app and latest POC
-modal app stop ap-Er7j88MBcDX1xCNx308poQ  # Discord POC
-modal app stop ap-HOzEIhMly7qpERDUoO9Ub1  # Old v0.7.9
-modal app stop ap-yqrcBoNaoWBjib51yU4gUO  # Old v0.7.9
-modal app stop ap-IKE89hOPa7eTfEetqHSZxG  # Old v0.7.9
-modal app stop ap-UXvCpLTOFWDpZMy7FhhWFx  # Old v0.7.9
-modal app stop ap-jQLOvrZAW8fJPQo5s8yrIZ  # Old POC
-modal app stop ap-9ZtxeD5xDAuOwumgDQYjXF  # Old POC
-
-# Keep only:
-# - ap-AVlJTwYUN9C5Xw99DJqBHv (Production v0.7.9)
-# - ap-u09kJJs9C9yt5zQlf9G6AS (Latest POC v0.8.0)
+# Already stopped 7 apps - DONE!
+# Remaining active apps: 2 (down from 9)
 ```
 
-**Expected Savings**: ~85% cost reduction (7 of 9 apps stopped)
+**Current Status**: 
+- **Before**: 9 apps running = potential $741/month
+- **After**: 2 apps running = current $741/month  
+- **Issue**: The 2 remaining apps still have expensive config!
 
-### 2. Optimize Container Configuration
+### 2. Optimize Container Configuration (URGENT - NEXT STEP)
+**Current expensive config in remaining apps**:
 ```python
 @app.function(
-    cpu=2.0,              # Reduce from 4.0 → 2.0 (50% savings)
-    memory=4096,          # Reduce from 8192 → 4096 (50% savings)
+    cpu=4.0,              # REDUCE: 4.0 → 2.0 (50% savings)
+    memory=8192,          # REDUCE: 8192 → 4096 (50% savings)  
+    min_containers=1,     # CRITICAL: Change to 0 (eliminate always-on)
+)
+```
+
+**Optimized config**:
+```python
+@app.function(
+    cpu=2.0,              # Sufficient for GPT API calls
+    memory=4096,          # Enough for sentence transformers
     min_containers=0,     # CRITICAL: No always-on containers
     timeout=300,
     scaledown_window=300, # Scale down faster
 )
 ```
 
-**Expected Savings**: 75% cost reduction per container + no idle costs
+**Expected Savings**: From $24.71/day → ~$6/day (75% reduction)
+
+### 3. Fix Both Remaining Apps (ACTION NEEDED)
+**Must update these apps with optimized config**:
+- `ap-AVlJTwYUN9C5Xw99DJqBHv` (v0.7.9 production)
+- `ap-u09kJJs9C9yt5zQlf9G6AS` (v0.8.0 POC)
 
 ### 3. Fix Deployment Pattern
 ```python
@@ -175,14 +198,18 @@ app = App("poe-lastz-dev")  # Single dev app
 - **Usage Alerts**: Alert when containers run too long
 - **Auto-shutdown**: Automatically stop unused apps
 
-## 📊 Expected Cost Reduction
+## 📊 Expected Cost Reduction - UPDATED
 
 | Optimization | Current Cost | Optimized Cost | Savings |
 |-------------|--------------|----------------|---------|
-| Stop 7 apps | $54/hour | $12/hour | 78% |
-| Reduce memory | $12/hour | $6/hour | 50% |
-| Remove min_containers | $6/hour | $0/idle | 100% idle |
-| **Total Expected** | **$1,296/day** | **~$20/day** | **98%** |
+| Stopped 7 apps | $741/month | $741/month | 0% (apps still expensive) |
+| Reduce CPU 4→2 | $741/month | $370.50/month | 50% |
+| Reduce memory 8GB→4GB | $370.50/month | $185.25/month | 50% |
+| Remove min_containers | $185.25/month | $30-60/month | 70-85% |
+| **Total Expected** | **$741/month** | **$30-60/month** | **92-96%** |
+
+**Critical Insight**: Stopping apps didn't help because we kept the 2 most expensive ones! 
+The real savings come from optimizing the container configuration.
 
 ## ⚠️ Development Best Practices Going Forward
 

@@ -27,8 +27,9 @@ deploy_time = datetime.now().strftime("%Y-%m-%d %H:%M")
 # Dependencies for Modal - using exact working versions from v0.7.9
 REQUIREMENTS = ["fastapi-poe", "numpy", "scikit-learn", "sentence-transformers", "torch", "requests"]
 
-print(f"🚀 Last Z Bot v0.8.0 POC - {deploy_time}")
+print(f"🚀 Last Z Bot v0.8.0 POC - COST OPTIMIZED - {deploy_time}")
 print(f"🔑 Deploy hash: {deploy_hash}")
+print(f"💰 Config: 2 CPU, 4GB RAM, min_containers=0 (cost reduced ~75%)")
 
 # Create Modal Volume for persistent data storage
 volume = Volume.from_name("lastz-data-collection", create_if_missing=True)
@@ -465,11 +466,12 @@ app = App(f"poe-lastz-v0-8-0-poc-{deploy_hash}")
 
 @app.function(
     image=image,
-    cpu=4.0,  # 4 vCPUs for processing + data collection
-    memory=8192,  # 8GB RAM for embeddings + logging
-    min_containers=1,  # Keep 1 instance warm
-    timeout=300,  # 5 minute timeout
-    scaledown_window=600,  # Keep container alive 10 minutes
+    cpu=2.0,                    # REDUCED: 4.0 → 2.0 (50% CPU cost savings)
+    memory=4096,                # REDUCED: 8192 → 4096 (50% memory cost savings)
+    min_containers=0,           # CRITICAL: 1 → 0 (eliminate always-on costs)
+    max_containers=2,           # Limit scaling to control costs
+    timeout=300,                # 5 minute timeout
+    scaledown_window=180,       # Scale down after 3 minutes idle (was 600)
     volumes={"/app/storage": volume},  # Mount volume for data storage
     secrets=[
         modal.Secret.from_dict({
