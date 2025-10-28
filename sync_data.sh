@@ -31,7 +31,19 @@ if [ -d "$DATA_DIR/.git" ]; then
 else
     echo "📥 Cloning data repo for first time..."
     cd /mnt/data
-    git clone https://github.com/bcoughlin/lastz-rag.git
+    
+    # Check if GitHub token is available
+    if [ -z "$GITHUB_TOKEN" ]; then
+        echo "❌ FATAL ERROR: GITHUB_TOKEN not set and repo is private"
+        echo "❌ Add GITHUB_TOKEN environment variable in Render Dashboard"
+        echo "❌ Current env vars: $(env | grep -i github || echo 'none')"
+        exit 1
+    fi
+    
+    echo "✅ GITHUB_TOKEN found, cloning private repo..."
+    # Use token for authentication (token should have 'repo' scope)
+    git clone https://${GITHUB_TOKEN}@github.com/bcoughlin/lastz-rag.git
+    
     echo "✅ Data cloned successfully"
 fi
 
