@@ -3,7 +3,7 @@ services:
     name: lastz-bot-v0-8-1
     env: python
     buildCommand: pip install -r requirements_render.txt
-    startCommand: python -m uvicorn poe_lastz_v0_8_1:app --host 0.0.0.0 --port $PORT
+    startCommand: bash sync_data.sh && python -m uvicorn poe_lastz_v0_8_1:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: POE_ACCESS_KEY
         sync: false  # Set manually in Render dashboard
@@ -13,3 +13,7 @@ services:
         value: /tmp/lastz_data
     instanceType: starter
     healthCheckPath: /health
+    disk:
+      name: lastz-knowledge-base
+      mountPath: /mnt/data
+      sizeGB: 1

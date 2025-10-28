@@ -198,38 +198,361 @@ except Exception as e:
     print(f"❌ OpenAI client initialization failed: {e}")
     raise RuntimeError(f"Failed to initialize OpenAI client: {e}")
 
-# Simple knowledge base for POC (in production, load from external source)
-knowledge_items = [
-    {
-        "title": "Hero Recruitment",
-        "content": "Focus on recruiting Sophia (tank), Katrina (damage), and Evelyn (support) early game. These heroes form a solid foundation for your team."
-    },
-    {
-        "title": "Headquarters Progression", 
-        "content": "Upgrade your headquarters to unlock new buildings and research. Prioritize reaching HQ level 10 for advanced military structures."
-    },
-    {
-        "title": "Research Priorities",
-        "content": "Focus on military research first: Infantry Attack, Infantry Defense, then economic research like Construction Speed and Resource Production."
-    },
-    {
-        "title": "Building Placement",
-        "content": "Place defensive buildings near your headquarters. Keep resource buildings protected inside your walls. Upgrade walls regularly."
-    }
-]
+# Knowledge base loaded from data files
+knowledge_items = []
 
-knowledge_embeddings = None  # Will store precomputed embeddings
+def load_knowledge_base():
+    """Load comprehensive knowledge base from data directory (Render compatible)"""
+    global knowledge_items
+    knowledge_items = []
+    
+    # Determine data path - try multiple locations for Render compatibility
+    data_path_options = [
+        "/mnt/data/lastz-rag/data",  # Render Disk mount point (PRODUCTION)
+        "../lastz-rag/data",  # Relative path if deployed with repo
+        "/app/lastz-rag/data",  # Absolute path on Render (legacy)
+        "./data",  # Local development
+        os.path.join(os.path.dirname(__file__), "..", "lastz-rag", "data")  # Relative from script location
+    ]
+    
+    data_path = None
+    for path in data_path_options:
+        if os.path.exists(path):
+            data_path = path
+            print(f"✅ Found data directory: {path}")
+            break
+    
+    if not data_path:
+        print("❌ WARNING: Data directory not found! Using minimal fallback knowledge.")
+        # Minimal fallback
+        knowledge_items.append({
+            'type': 'fallback',
+            'name': 'Last Z Knowledge',
+            'text': 'Last Z is a survival shooter game with heroes, buildings, and strategic gameplay.',
+            'data': {}
+        })
+        return
+    
+    print(f"📚 Loading knowledge base from: {data_path}")
+    
+    # Load data_index.md configuration
+    data_index_path = os.path.join(data_path, "data_index.md")
+    if os.path.exists(data_index_path):
+        _load_from_data_index(data_path, data_index_path)
+    else:
+        print("⚠️ data_index.md not found, using legacy loading")
+        _load_legacy_hardcoded(data_path)
+    
+    print(f"✅ Loaded {len(knowledge_items)} total knowledge items")
 
-def initialize_knowledge_base():
-    """Initialize knowledge base with precomputed OpenAI embeddings"""
-    global knowledge_embeddings
-    print("🧠 Knowledge base ready (using OpenAI embeddings)")
-    print(f"✅ Loaded {len(knowledge_items)} knowledge items")
-    # Note: In production, precompute embeddings and store them
-    # For POC, we'll compute on-demand to save startup time
+def _parse_data_index(data_index_path):
+    """Parse data_index.md to get loading configuration"""
+    try:
+        with open(data_index_path, encoding='utf-8') as f:
+            content = f.read()
+        
+        config = {
+            'core_static': [],
+            'dynamic_json_dirs': [],
+            'dynamic_json_files': [],
+            'dynamic_markdown_dirs': []
+        }
+        
+        # Simple parsing of YAML-like structure in markdown
+        lines = content.split('\n')
+        current_section = None
+        
+        for line in lines:
+            if 'core_static:' in line:
+                current_section = 'core_static'
+            elif 'directories:' in line and current_section != 'core_static':
+                current_section = 'dynamic_json_dirs'
+            elif 'files:' in line and current_section != 'core_static':
+                current_section = 'dynamic_json_files'
+            elif 'dynamic_markdown:' in line:
+                current_section = 'dynamic_markdown'
+            elif '- file:' in line and current_section == 'core_static':
+                # Extract file path
+                parts = line.split('"')
+                if len(parts) >= 2:
+                    config['core_static'].append(parts[1])
+            elif '- path:' in line and current_section == 'dynamic_json_dirs':
+                # Extract directory path
+                parts = line.split('"')
+                if len(parts) >= 2:
+                    config['dynamic_json_dirs'].append(parts[1].rstrip('/'))
+            elif '- path:' in line and current_section == 'dynamic_json_files':
+                # Extract file path
+                parts = line.split('"')
+                if len(parts) >= 2:
+                    config['dynamic_json_files'].append(parts[1])
+            elif '- path:' in line and current_section == 'dynamic_markdown':
+                # Extract directory path
+                parts = line.split('"')
+                if len(parts) >= 2:
+                    config['dynamic_markdown_dirs'].append(parts[1].rstrip('/'))
+        
+        return config
+    except Exception as e:
+        print(f"❌ Error parsing data_index.md: {e}")
+        return None
 
-# Initialize at startup
-initialize_knowledge_base()
+def _load_from_data_index(data_path, data_index_path):
+    """Load data based on data_index.md configuration"""
+    config = _parse_data_index(data_index_path)
+    if not config:
+        print("⚠️ Failed to parse data_index.md, falling back to legacy loading")
+        _load_legacy_hardcoded(data_path)
+        return
+    
+    print(f"📋 Parsed data_index.md configuration")
+    
+    # Load core static markdown files
+    for file_path in config['core_static']:
+        full_path = os.path.join(data_path, file_path)
+        if os.path.exists(full_path):
+            try:
+                with open(full_path, encoding='utf-8') as f:
+                    content = f.read()
+                
+                filename = os.path.basename(file_path)
+                searchable_text = f"Core Guide: {filename.replace('.md', '').replace('_', ' ').title()} "
+                searchable_text += f"Content: {content[:500]}..."
+                
+                knowledge_items.append({
+                    'type': 'core_guide',
+                    'name': filename.replace('.md', '').replace('_', ' ').title(),
+                    'text': searchable_text,
+                    'data': {'filename': filename, 'content': content}
+                })
+                print(f"✅ Loaded core guide: {filename}")
+            except Exception as e:
+                print(f"❌ Error loading {file_path}: {e}")
+    
+    # Load JSON directories
+    for dir_name in config['dynamic_json_dirs']:
+        dir_path = os.path.join(data_path, dir_name)
+        if os.path.exists(dir_path):
+            _load_json_directory(dir_path, dir_name)
+    
+    # Load individual JSON files
+    for file_path in config['dynamic_json_files']:
+        full_path = os.path.join(data_path, file_path)
+        if os.path.exists(full_path):
+            try:
+                with open(full_path, encoding='utf-8') as f:
+                    data = json.load(f)
+                
+                filename = os.path.basename(file_path)
+                _process_json_file(filename, data)
+                print(f"✅ Loaded JSON file: {filename}")
+            except Exception as e:
+                print(f"❌ Error loading {file_path}: {e}")
+    
+    # Load markdown directories
+    for dir_name in config['dynamic_markdown_dirs']:
+        # Check both relative to data_path and absolute
+        possible_paths = [
+            os.path.join(data_path, dir_name),
+            os.path.join(data_path, "..", dir_name),  # kb/ is at root level
+            os.path.join(os.path.dirname(data_path), dir_name)
+        ]
+        
+        for dir_path in possible_paths:
+            if os.path.exists(dir_path):
+                _load_markdown_directory(dir_path, dir_name)
+                break
+        else:
+            print(f"⚠️ Markdown directory not found: {dir_name}")
+
+def _load_json_directory(dir_path, dir_name):
+    """Load all JSON files from a directory"""
+    try:
+        for filename in os.listdir(dir_path):
+            if filename.endswith('.json'):
+                try:
+                    with open(os.path.join(dir_path, filename), encoding='utf-8') as f:
+                        data = json.load(f)
+                    
+                    # Process based on directory type
+                    if dir_name == 'heroes':
+                        _process_hero_file(filename, data)
+                    elif dir_name == 'research':
+                        _process_research_file(filename, data)
+                    else:
+                        _process_generic_json(filename, data, dir_name)
+                except Exception as e:
+                    print(f"❌ Error loading {dir_name}/{filename}: {e}")
+    except Exception as e:
+        print(f"❌ Error reading directory {dir_path}: {e}")
+
+def _load_markdown_directory(dir_path, dir_name):
+    """Load all markdown files from a directory"""
+    try:
+        for filename in os.listdir(dir_path):
+            if filename.endswith('.md'):
+                try:
+                    with open(os.path.join(dir_path, filename), encoding='utf-8') as f:
+                        content = f.read()
+                    
+                    searchable_text = f"{dir_name.upper()} Article: {filename.replace('.md', '').replace('_', ' ').title()} "
+                    searchable_text += f"Content: {content[:500]}..."
+                    
+                    knowledge_items.append({
+                        'type': f'{dir_name}_article',
+                        'name': filename.replace('.md', '').replace('_', ' ').title(),
+                        'text': searchable_text,
+                        'data': {'filename': filename, 'content': content, 'directory': dir_name}
+                    })
+                    print(f"✅ Loaded {dir_name} article: {filename}")
+                except Exception as e:
+                    print(f"❌ Error loading {dir_name}/{filename}: {e}")
+    except Exception as e:
+        print(f"❌ Error reading directory {dir_path}: {e}")
+
+def _process_hero_file(filename, hero_data):
+    """Process hero JSON files"""
+    hero_text = f"Hero: {hero_data.get('name', 'Unknown')} "
+    hero_text += f"Role: {hero_data.get('role', 'Unknown')} "
+    hero_text += f"Rarity: {hero_data.get('rarity', 'Unknown')} "
+    
+    if 'skills' in hero_data:
+        skills = hero_data['skills']
+        if isinstance(skills, list):
+            skill_names = []
+            for skill in skills:
+                if isinstance(skill, dict):
+                    skill_names.append(skill.get('name', 'Unknown Skill'))
+                else:
+                    skill_names.append(str(skill))
+            hero_text += f"Skills: {' '.join(skill_names)} "
+        else:
+            hero_text += f"Skills: {str(skills)} "
+    
+    if 'description' in hero_data:
+        hero_text += f"Description: {hero_data['description']}"
+    
+    knowledge_items.append({
+        'type': 'hero',
+        'name': hero_data.get('name', filename),
+        'text': hero_text,
+        'data': hero_data
+    })
+
+def _process_research_file(filename, research_data):
+    """Process research JSON files"""
+    research_text = f"Research: {research_data.get('name', filename)} "
+    research_text += f"Category: {research_data.get('category', 'Unknown')} "
+    research_text += f"Description: {research_data.get('description', '')}"
+    
+    knowledge_items.append({
+        'type': 'research',
+        'name': research_data.get('name', filename),
+        'text': research_text,
+        'data': research_data
+    })
+
+def _process_generic_json(filename, data, directory):
+    """Process generic JSON files from directories"""
+    content_text = f"{directory.title()} Data: {filename} "
+    content_text += f"File containing {len(str(data))} characters of {directory} information"
+    
+    knowledge_items.append({
+        'type': directory,
+        'name': filename.replace('.json', '').replace('_', ' ').title(),
+        'text': content_text,
+        'data': data
+    })
+
+def _process_json_file(filename, data):
+    """Process different types of JSON files"""
+    if filename == 'buildings.json' and 'buildings' in data:
+        for building in data['buildings']:
+            building_text = f"Building: {building.get('name', 'Unknown')} "
+            building_text += f"Type: {building.get('type', 'Unknown')} "
+            building_text += f"Function: {building.get('function', '')} "
+            if 'produces' in building:
+                building_text += f"Produces: {building['produces']} "
+            building_text += f"Notes: {building.get('notes', '')}"
+            
+            knowledge_items.append({
+                'type': 'building',
+                'name': building.get('name', 'Unknown'),
+                'text': building_text,
+                'data': building
+            })
+    elif filename == 'equipment.json':
+        # Handle equipment data
+        equipment_items = []
+        if isinstance(data, list):
+            equipment_items = data
+        elif 'equipment' in data:
+            equipment_items = data['equipment']
+        
+        for item in equipment_items[:20]:  # Limit to avoid overwhelming
+            if isinstance(item, dict):
+                item_text = f"Equipment: {item.get('name', 'Unknown')} "
+                item_text += f"Type: {item.get('type', 'Unknown')} "
+                item_text += f"Stats: {item.get('stats', '')} "
+                
+                knowledge_items.append({
+                    'type': 'equipment',
+                    'name': item.get('name', 'Unknown'),
+                    'text': item_text,
+                    'data': item
+                })
+    else:
+        # Generic JSON file processing
+        content_text = f"Data from {filename}: "
+        if isinstance(data, dict):
+            content_text += f"Contains keys: {', '.join(list(data.keys())[:10])}"
+        elif isinstance(data, list):
+            content_text += f"Contains {len(data)} items"
+        
+        knowledge_items.append({
+            'type': 'data_file',
+            'name': filename.replace('.json', '').replace('_', ' ').title(),
+            'text': content_text,
+            'data': data
+        })
+
+def _load_legacy_hardcoded(data_path):
+    """Fallback to hardcoded loading if data_index.md fails"""
+    print("🔄 Using legacy hardcoded data loading...")
+    
+    # Legacy core files
+    core_files = ["game_fundamentals.md", "terminology.md", "what_is_lastz.md", "README.md"]
+    core_path = os.path.join(data_path, "core")
+    
+    if os.path.exists(core_path):
+        for filename in core_files:
+            filepath = os.path.join(core_path, filename)
+            if os.path.exists(filepath):
+                try:
+                    with open(filepath, encoding='utf-8') as f:
+                        content = f.read()
+                    
+                    searchable_text = f"Core Guide: {filename.replace('.md', '').replace('_', ' ').title()} "
+                    searchable_text += f"Content: {content[:500]}..."
+                    
+                    knowledge_items.append({
+                        'type': 'core_guide',
+                        'name': filename.replace('.md', '').replace('_', ' ').title(),
+                        'text': searchable_text,
+                        'data': {'filename': filename, 'content': content}
+                    })
+                    print(f"✅ Loaded legacy core guide: {filename}")
+                except Exception as e:
+                    print(f"❌ Error loading {filename}: {e}")
+    
+    # Legacy directory scans
+    for directory in ['heroes', 'research']:
+        dir_path = os.path.join(data_path, directory)
+        if os.path.exists(dir_path):
+            _load_json_directory(dir_path, directory)
+
+# Initialize knowledge base at startup
+load_knowledge_base()
 
 def cosine_similarity(a, b):
     """Simple cosine similarity calculation"""
@@ -257,11 +580,12 @@ def get_openai_embedding(text: str) -> List[float]:
         return []
 
 def search_lastz_knowledge(user_query):
-    """Search using OpenAI embeddings"""
+    """Search using OpenAI embeddings with comprehensive knowledge base"""
     start_time = time.time()
     
     try:
         print(f"🔧 OpenAI embedding search called: '{user_query}'")
+        print(f"📚 Searching {len(knowledge_items)} knowledge items")
         
         # Get embedding for user query
         query_embedding = get_openai_embedding(user_query)
@@ -276,8 +600,13 @@ def search_lastz_knowledge(user_query):
         
         # Calculate similarity with each knowledge item
         for item in knowledge_items:
-            # Get embedding for knowledge item content
-            item_embedding = get_openai_embedding(item["content"])
+            # Get the searchable text from the item
+            searchable_text = item.get("text", "")
+            if not searchable_text:
+                continue
+            
+            # Get embedding for knowledge item
+            item_embedding = get_openai_embedding(searchable_text)
             if not item_embedding:
                 continue
                 
@@ -285,18 +614,27 @@ def search_lastz_knowledge(user_query):
             similarity = cosine_similarity(query_embedding, item_embedding)
             
             if similarity > 0.2:  # Similarity threshold
+                # Extract content for display
+                content = searchable_text
+                if 'data' in item and isinstance(item['data'], dict):
+                    if 'content' in item['data']:
+                        content = item['data']['content'][:500]  # Limit content length
+                
                 results.append({
-                    "content": item["content"],
-                    "title": item["title"],
+                    "content": content,
+                    "title": item.get("name", "Unknown"),
+                    "type": item.get("type", "unknown"),
                     "similarity": similarity
                 })
         
         # Sort by similarity and limit results
         results.sort(key=lambda x: x["similarity"], reverse=True)
-        results = results[:3]
+        results = results[:5]  # Increased from 3 to 5 for better context
         
         search_time = time.time() - start_time
         print(f"⚡ OpenAI embedding search: {len(results)} results in {search_time:.2f}s")
+        if results:
+            print(f"   Top result: {results[0]['title']} (similarity: {results[0]['similarity']:.3f})")
         
         return {
             "query": user_query,
@@ -307,6 +645,8 @@ def search_lastz_knowledge(user_query):
         
     except Exception as e:
         print(f"❌ Search error: {e}")
+        import traceback
+        traceback.print_exc()
         return {
             "query": user_query,
             "error": str(e),
@@ -395,9 +735,12 @@ class LastZBot(fp.PoeBot):
         
         # Simple knowledge search if query contains keywords
         search_result = None
-        if any(keyword in user_message.lower() for keyword in ['hero', 'build', 'upgrade', 'strategy', 'research', 'headquarters']):
+        print(f"🔎 Checking for search keywords in: {user_message.lower()}")
+        if any(keyword in user_message.lower() for keyword in ['hero', 'build', 'upgrade', 'strategy', 'research', 'headquarters', 'weapon', 'equipment']):
+            print(f"✅ Found keyword - triggering search")
             tool_calls_made.append('search_lastz_knowledge')
             search_result = search_lastz_knowledge(user_message)
+            print(f"🔍 Search result: {search_result}")
         
         # Create conversation for GPT
         conversation = [
@@ -522,8 +865,50 @@ async def health_check():
         "version": "0.8.1",
         "hosting": "render",
         "timestamp": datetime.now().isoformat(),
-        "deploy_hash": deploy_hash
+        "deploy_hash": deploy_hash,
+        "knowledge_items": len(knowledge_items)
     }
+
+@app.post("/admin/refresh-data")
+async def refresh_data(api_key: str):
+    """Admin endpoint to refresh knowledge base without redeploying"""
+    import subprocess
+    
+    # Simple API key check (set ADMIN_API_KEY in Render env vars)
+    expected_key = os.environ.get("ADMIN_API_KEY", "")
+    if not expected_key or api_key != expected_key:
+        return {"error": "Unauthorized"}, 401
+    
+    try:
+        # Run git pull on the mounted data directory
+        result = subprocess.run(
+            ["git", "-C", "/mnt/data/lastz-rag", "pull", "origin", "main"],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        if result.returncode == 0:
+            # Reload knowledge base
+            old_count = len(knowledge_items)
+            load_knowledge_base()
+            new_count = len(knowledge_items)
+            
+            return {
+                "status": "success",
+                "git_output": result.stdout,
+                "old_count": old_count,
+                "new_count": new_count,
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            return {
+                "status": "error",
+                "git_error": result.stderr,
+                "returncode": result.returncode
+            }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 if __name__ == "__main__":
     import uvicorn
