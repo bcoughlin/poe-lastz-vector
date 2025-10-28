@@ -1,9 +1,5 @@
 fastapi-poe==0.0.48
 fastapi
 uvicorn[standard]
-numpy
-scikit-learn
-sentence-transformers
-torch
 requests
 python-multipart

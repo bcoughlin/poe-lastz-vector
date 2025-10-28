@@ -17,9 +17,6 @@ import logging
 
 import fastapi_poe as fp
 from fastapi import FastAPI
-from sentence_transformers import SentenceTransformer
-import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -187,13 +184,9 @@ CRITICAL: Only reference real hero names like Sophia, Katrina, Evelyn, Marcus, e
 SYSTEM_PROMPT = load_system_prompt()
 
 # Initialize ML model and knowledge base
-print("🤖 Loading sentence transformer model...")
-try:
-    model = SentenceTransformer('all-MiniLM-L6-v2')
-    print("✅ Model loaded successfully")
-except Exception as e:
-    print(f"❌ Model loading failed: {e}")
-    model = None
+print("🤖 Skipping sentence transformer model (memory optimization)")
+print("⚠️  Using simplified keyword matching instead of vector search")
+model = None
 
 # Simple knowledge base for POC (in production, load from external source)
 knowledge_items = [
@@ -218,76 +211,63 @@ knowledge_items = [
 knowledge_embeddings = None
 
 def initialize_knowledge_base():
-    """Initialize knowledge base with embeddings"""
-    global knowledge_embeddings
-    
-    if model and knowledge_items:
-        try:
-            print("🧠 Creating embeddings for knowledge items...")
-            embeddings_list = []
-            for item in knowledge_items:
-                embedding = model.encode(item["content"])
-                embeddings_list.append(embedding)
-            
-            knowledge_embeddings = np.array(embeddings_list)
-            print(f"✅ Created embeddings: {knowledge_embeddings.shape}")
-        except Exception as e:
-            print(f"❌ Knowledge base initialization error: {e}")
+    """Initialize knowledge base (simplified for memory constraints)"""
+    print("🧠 Knowledge base ready (using keyword matching)")
+    print(f"✅ Loaded {len(knowledge_items)} knowledge items")
 
 # Initialize at startup
 initialize_knowledge_base()
 
 def search_lastz_knowledge(user_query):
-    """Search the Last Z knowledge base using vector embeddings"""
+    """Simple keyword-based search for memory-constrained environments"""
     start_time = time.time()
     
     try:
-        print(f"🔧 Vector search tool called: '{user_query}'")
+        print(f"🔧 Keyword search tool called: '{user_query}'")
         
-        if not model or knowledge_embeddings is None:
-            print("❌ Model or embeddings not available")
-            return {"query": user_query, "error": "Search not available", "results": []}
-        
-        # Create embedding for user query
-        query_embedding = model.encode([user_query])
-        
-        # Calculate similarities
-        similarities = cosine_similarity(query_embedding, knowledge_embeddings)[0]
-        
-        # Get top results with similarity threshold
-        similarity_threshold = 0.2
-        top_indices = np.where(similarities >= similarity_threshold)[0]
-        top_similarities = similarities[top_indices]
-        
-        # Sort by similarity
-        sorted_pairs = sorted(zip(top_indices, top_similarities), key=lambda x: x[1], reverse=True)
-        
-        search_time = time.time() - start_time
-        print(f"⚡ Vector search: {len(sorted_pairs)} results in {search_time:.2f}s")
-        
-        if len(sorted_pairs) > 3:
-            sorted_pairs = sorted_pairs[:3]
-        
-        # Format results
+        # Simple keyword matching instead of vector search
+        query_lower = user_query.lower()
         results = []
-        for idx, similarity in sorted_pairs:
-            if idx < len(knowledge_items):
-                item = knowledge_items[idx]
+        
+        for item in knowledge_items:
+            # Check if query keywords appear in content
+            content_lower = item["content"].lower()
+            title_lower = item["title"].lower()
+            
+            # Simple scoring based on keyword matches
+            score = 0
+            keywords = query_lower.split()
+            
+            for keyword in keywords:
+                if len(keyword) > 2:  # Skip very short words
+                    if keyword in title_lower:
+                        score += 2  # Title matches are more important
+                    elif keyword in content_lower:
+                        score += 1
+            
+            if score > 0:
                 results.append({
                     "content": item["content"],
-                    "title": item.get("title", "Knowledge Item"),
-                    "similarity": float(similarity)
+                    "title": item["title"],
+                    "similarity": score / 10.0  # Normalize score
                 })
+        
+        # Sort by score and limit results
+        results.sort(key=lambda x: x["similarity"], reverse=True)
+        results = results[:3]
+        
+        search_time = time.time() - start_time
+        print(f"⚡ Keyword search: {len(results)} results in {search_time:.2f}s")
         
         return {
             "query": user_query,
             "results": results,
-            "total_found": len(sorted_pairs),
+            "total_found": len(results),
             "search_time": search_time
         }
         
     except Exception as e:
-        print(f"❌ Vector search error: {e}")
+        print(f"❌ Keyword search error: {e}")
         return {
             "query": user_query,
             "error": str(e),
@@ -467,7 +447,7 @@ class LastZBot(fp.PoeBot):
             server_bot_dependencies={"GPT-4": 1},  # Using GPT-4 for Render compatibility
             allow_attachments=True,           # ✅ Enable image uploads
             enable_image_comprehension=True,  # ✅ Auto image analysis
-            introduction_message=f"🎮 Last Z Bot v0.8.1 (Render Hosted)! 🧪 Data collection POC with cost-optimized hosting. Ask me anything about Last Z strategy! 🧟‍♂️💥\n\nDeployed: {deploy_time} | Hash: {deploy_hash[:4]}"
+            introduction_message=f"🎮 Last Z Bot v0.8.1 (Render Hosted)! 🧪 Data collection POC with memory-optimized hosting. Ask me anything about Last Z strategy! 🧟‍♂️💥\n\nDeployed: {deploy_time} | Hash: {deploy_hash[:4]} | Mode: Lightweight"
         )
 
 # Create FastAPI app for Render deployment
