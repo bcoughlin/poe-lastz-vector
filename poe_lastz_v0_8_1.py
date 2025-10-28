@@ -223,15 +223,12 @@ def load_knowledge_base():
             break
     
     if not data_path:
-        print("❌ WARNING: Data directory not found! Using minimal fallback knowledge.")
-        # Minimal fallback
-        knowledge_items.append({
-            'type': 'fallback',
-            'name': 'Last Z Knowledge',
-            'text': 'Last Z is a survival shooter game with heroes, buildings, and strategic gameplay.',
-            'data': {}
-        })
-        return
+        print("❌ FATAL ERROR: Data directory not found!")
+        print("❌ Searched paths:")
+        for path in data_path_options:
+            print(f"   - {path}")
+        print("❌ Deployment failed - knowledge base required for operation")
+        raise RuntimeError("Knowledge base data directory not found. Cannot start bot without data.")
     
     print(f"📚 Loading knowledge base from: {data_path}")
     
