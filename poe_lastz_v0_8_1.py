@@ -185,9 +185,20 @@ CRITICAL: Only reference real hero names like Sophia, Katrina, Evelyn, Marcus, e
 SYSTEM_PROMPT = load_system_prompt()
 
 # Initialize OpenAI client for embeddings
-print("🤖 Using OpenAI embeddings API (memory-efficient)")
-openai_client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-model = "openai_embeddings"  # Flag for search function
+openai_api_key = os.environ.get("OPENAI_API_KEY")
+if openai_api_key:
+    try:
+        print("🤖 Using OpenAI embeddings API (memory-efficient)")
+        openai_client = openai.OpenAI(api_key=openai_api_key)
+        model = "openai_embeddings"  # Flag for search function
+    except Exception as e:
+        print(f"❌ OpenAI client initialization failed: {e}")
+        openai_client = None
+        model = "keyword_fallback"
+else:
+    print("⚠️  No OpenAI API key found, using fallback keyword search")
+    openai_client = None
+    model = "keyword_fallback"
 
 # Simple knowledge base for POC (in production, load from external source)
 knowledge_items = [
@@ -235,6 +246,9 @@ def cosine_similarity(a, b):
 def get_openai_embedding(text: str) -> List[float]:
     """Get embedding from OpenAI API"""
     try:
+        if not openai_client:
+            print("❌ OpenAI client not available")
+            return []
         response = openai_client.embeddings.create(
             model="text-embedding-3-small",  # Cost-effective model
             input=text
@@ -245,43 +259,86 @@ def get_openai_embedding(text: str) -> List[float]:
         return []
 
 def search_lastz_knowledge(user_query):
-    """Search using OpenAI embeddings (memory-efficient, high-quality)"""
+    """Search using OpenAI embeddings or fallback to keyword matching"""
     start_time = time.time()
     
     try:
-        print(f"🔧 OpenAI embedding search called: '{user_query}'")
+        # Try OpenAI embeddings first
+        if openai_client and model == "openai_embeddings":
+            print(f"🔧 OpenAI embedding search called: '{user_query}'")
+            
+            # Get embedding for user query
+            query_embedding = get_openai_embedding(user_query)
+            if query_embedding:
+                results = []
+                
+                # Calculate similarity with each knowledge item
+                for item in knowledge_items:
+                    # Get embedding for knowledge item content
+                    item_embedding = get_openai_embedding(item["content"])
+                    if not item_embedding:
+                        continue
+                        
+                    # Calculate cosine similarity
+                    similarity = cosine_similarity(query_embedding, item_embedding)
+                    
+                    if similarity > 0.2:  # Similarity threshold
+                        results.append({
+                            "content": item["content"],
+                            "title": item["title"],
+                            "similarity": similarity
+                        })
+                
+                # Sort by similarity and limit results
+                results.sort(key=lambda x: x["similarity"], reverse=True)
+                results = results[:3]
+                
+                search_time = time.time() - start_time
+                print(f"⚡ OpenAI embedding search: {len(results)} results in {search_time:.2f}s")
+                
+                return {
+                    "query": user_query,
+                    "results": results,
+                    "total_found": len(results),
+                    "search_time": search_time
+                }
         
-        # Get embedding for user query
-        query_embedding = get_openai_embedding(user_query)
-        if not query_embedding:
-            print("❌ Failed to get query embedding")
-            return {"query": user_query, "error": "Embedding failed", "results": []}
+        # Fallback to keyword search
+        print(f"🔧 Keyword fallback search called: '{user_query}'")
         
+        # Simple keyword matching instead of vector search
+        query_lower = user_query.lower()
         results = []
         
-        # Calculate similarity with each knowledge item
         for item in knowledge_items:
-            # Get embedding for knowledge item content
-            item_embedding = get_openai_embedding(item["content"])
-            if not item_embedding:
-                continue
-                
-            # Calculate cosine similarity
-            similarity = cosine_similarity(query_embedding, item_embedding)
+            # Check if query keywords appear in content
+            content_lower = item["content"].lower()
+            title_lower = item["title"].lower()
             
-            if similarity > 0.2:  # Similarity threshold
+            # Simple scoring based on keyword matches
+            score = 0
+            keywords = query_lower.split()
+            
+            for keyword in keywords:
+                if len(keyword) > 2:  # Skip very short words
+                    if keyword in title_lower:
+                        score += 2  # Title matches are more important
+                    elif keyword in content_lower:
+                        score += 1
+            
+            if score > 0:
                 results.append({
                     "content": item["content"],
                     "title": item["title"],
-                    "similarity": similarity
+                    "similarity": score / 10.0  # Normalize score
                 })
         
-        # Sort by similarity and limit results
+        # Sort by score and limit results
         results.sort(key=lambda x: x["similarity"], reverse=True)
         results = results[:3]
         
         search_time = time.time() - start_time
-        print(f"⚡ OpenAI embedding search: {len(results)} results in {search_time:.2f}s")
+        print(f"⚡ Keyword search: {len(results)} results in {search_time:.2f}s")
         
         return {
             "query": user_query,
@@ -291,7 +348,7 @@ def search_lastz_knowledge(user_query):
         }
         
     except Exception as e:
-        print(f"❌ OpenAI embedding search error: {e}")
+        print(f"❌ Search error: {e}")
         return {
             "query": user_query,
             "error": str(e),
@@ -467,11 +524,12 @@ class LastZBot(fp.PoeBot):
         store_interaction_data(interaction_data)
 
     async def get_settings(self, setting: fp.SettingsRequest) -> fp.SettingsResponse:
+        search_mode = "OpenAI Embeddings" if openai_client else "Keyword Fallback"
         return fp.SettingsResponse(
             server_bot_dependencies={"GPT-4": 1},  # Using GPT-4 for Render compatibility
             allow_attachments=True,           # ✅ Enable image uploads
             enable_image_comprehension=True,  # ✅ Auto image analysis
-            introduction_message=f"🎮 Last Z Bot v0.8.1 (Render + OpenAI)! 🧪 Data collection POC with intelligent vector search. Ask me anything about Last Z strategy! 🧟‍♂️💥\n\nDeployed: {deploy_time} | Hash: {deploy_hash[:4]} | Search: OpenAI Embeddings"
+            introduction_message=f"🎮 Last Z Bot v0.8.1 (Render Hosted)! 🧪 Data collection POC with intelligent search. Ask me anything about Last Z strategy! 🧟‍♂️💥\n\nDeployed: {deploy_time} | Hash: {deploy_hash[:4]} | Search: {search_mode}"
         )
 
 # Create FastAPI app for Render deployment
