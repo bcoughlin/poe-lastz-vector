@@ -329,8 +329,12 @@ def _load_from_data_index(data_path, data_index_path):
     # Load JSON directories
     for dir_name in config['dynamic_json_dirs']:
         dir_path = os.path.join(data_path, dir_name)
+        print(f"🔍 Looking for JSON directory: {dir_path}")
         if os.path.exists(dir_path):
+            print(f"✅ Found directory: {dir_name}, loading...")
             _load_json_directory(dir_path, dir_name)
+        else:
+            print(f"⚠️ Directory not found: {dir_path}")
     
     # Load individual JSON files
     for file_path in config['dynamic_json_files']:
