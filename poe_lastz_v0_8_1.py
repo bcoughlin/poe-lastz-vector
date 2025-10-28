@@ -17,6 +17,7 @@ import logging
 
 import fastapi_poe as fp
 from fastapi import FastAPI
+import openai
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -183,10 +184,10 @@ CRITICAL: Only reference real hero names like Sophia, Katrina, Evelyn, Marcus, e
 # Load system prompt at startup
 SYSTEM_PROMPT = load_system_prompt()
 
-# Initialize ML model and knowledge base
-print("🤖 Skipping sentence transformer model (memory optimization)")
-print("⚠️  Using simplified keyword matching instead of vector search")
-model = None
+# Initialize OpenAI client for embeddings
+print("🤖 Using OpenAI embeddings API (memory-efficient)")
+openai_client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+model = "openai_embeddings"  # Flag for search function
 
 # Simple knowledge base for POC (in production, load from external source)
 knowledge_items = [
@@ -208,56 +209,79 @@ knowledge_items = [
     }
 ]
 
-knowledge_embeddings = None
+knowledge_embeddings = None  # Will store precomputed embeddings
 
 def initialize_knowledge_base():
-    """Initialize knowledge base (simplified for memory constraints)"""
-    print("🧠 Knowledge base ready (using keyword matching)")
+    """Initialize knowledge base with precomputed OpenAI embeddings"""
+    global knowledge_embeddings
+    print("🧠 Knowledge base ready (using OpenAI embeddings)")
     print(f"✅ Loaded {len(knowledge_items)} knowledge items")
+    # Note: In production, precompute embeddings and store them
+    # For POC, we'll compute on-demand to save startup time
 
 # Initialize at startup
 initialize_knowledge_base()
 
+def cosine_similarity(a, b):
+    """Simple cosine similarity calculation"""
+    import math
+    dot_product = sum(x * y for x, y in zip(a, b))
+    magnitude_a = math.sqrt(sum(x * x for x in a))
+    magnitude_b = math.sqrt(sum(x * x for x in b))
+    if magnitude_a == 0 or magnitude_b == 0:
+        return 0
+    return dot_product / (magnitude_a * magnitude_b)
+
+def get_openai_embedding(text: str) -> List[float]:
+    """Get embedding from OpenAI API"""
+    try:
+        response = openai_client.embeddings.create(
+            model="text-embedding-3-small",  # Cost-effective model
+            input=text
+        )
+        return response.data[0].embedding
+    except Exception as e:
+        print(f"❌ OpenAI embedding error: {e}")
+        return []
+
 def search_lastz_knowledge(user_query):
-    """Simple keyword-based search for memory-constrained environments"""
+    """Search using OpenAI embeddings (memory-efficient, high-quality)"""
     start_time = time.time()
     
     try:
-        print(f"🔧 Keyword search tool called: '{user_query}'")
+        print(f"🔧 OpenAI embedding search called: '{user_query}'")
         
-        # Simple keyword matching instead of vector search
-        query_lower = user_query.lower()
+        # Get embedding for user query
+        query_embedding = get_openai_embedding(user_query)
+        if not query_embedding:
+            print("❌ Failed to get query embedding")
+            return {"query": user_query, "error": "Embedding failed", "results": []}
+        
         results = []
         
+        # Calculate similarity with each knowledge item
         for item in knowledge_items:
-            # Check if query keywords appear in content
-            content_lower = item["content"].lower()
-            title_lower = item["title"].lower()
+            # Get embedding for knowledge item content
+            item_embedding = get_openai_embedding(item["content"])
+            if not item_embedding:
+                continue
+                
+            # Calculate cosine similarity
+            similarity = cosine_similarity(query_embedding, item_embedding)
             
-            # Simple scoring based on keyword matches
-            score = 0
-            keywords = query_lower.split()
-            
-            for keyword in keywords:
-                if len(keyword) > 2:  # Skip very short words
-                    if keyword in title_lower:
-                        score += 2  # Title matches are more important
-                    elif keyword in content_lower:
-                        score += 1
-            
-            if score > 0:
+            if similarity > 0.2:  # Similarity threshold
                 results.append({
                     "content": item["content"],
                     "title": item["title"],
-                    "similarity": score / 10.0  # Normalize score
+                    "similarity": similarity
                 })
         
-        # Sort by score and limit results
+        # Sort by similarity and limit results
         results.sort(key=lambda x: x["similarity"], reverse=True)
         results = results[:3]
         
         search_time = time.time() - start_time
-        print(f"⚡ Keyword search: {len(results)} results in {search_time:.2f}s")
+        print(f"⚡ OpenAI embedding search: {len(results)} results in {search_time:.2f}s")
         
         return {
             "query": user_query,
@@ -267,7 +291,7 @@ def search_lastz_knowledge(user_query):
         }
         
     except Exception as e:
-        print(f"❌ Keyword search error: {e}")
+        print(f"❌ OpenAI embedding search error: {e}")
         return {
             "query": user_query,
             "error": str(e),
@@ -447,7 +471,7 @@ class LastZBot(fp.PoeBot):
             server_bot_dependencies={"GPT-4": 1},  # Using GPT-4 for Render compatibility
             allow_attachments=True,           # ✅ Enable image uploads
             enable_image_comprehension=True,  # ✅ Auto image analysis
-            introduction_message=f"🎮 Last Z Bot v0.8.1 (Render Hosted)! 🧪 Data collection POC with memory-optimized hosting. Ask me anything about Last Z strategy! 🧟‍♂️💥\n\nDeployed: {deploy_time} | Hash: {deploy_hash[:4]} | Mode: Lightweight"
+            introduction_message=f"🎮 Last Z Bot v0.8.1 (Render + OpenAI)! 🧪 Data collection POC with intelligent vector search. Ask me anything about Last Z strategy! 🧟‍♂️💥\n\nDeployed: {deploy_time} | Hash: {deploy_hash[:4]} | Search: OpenAI Embeddings"
         )
 
 # Create FastAPI app for Render deployment
