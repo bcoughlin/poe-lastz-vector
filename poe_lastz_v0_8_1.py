@@ -435,7 +435,7 @@ class LastZBot(fp.PoeBot):
         
         async for msg in fp.stream_request(
             sanitized_request,
-            "GPT-4",  # Use GPT-4 for Render (GPT-5 might not be available)
+            "GPT-5-Chat",  # Use GPT-5-Chat for Poe platform
             request.access_key,
         ):
             if hasattr(msg, 'text') and msg.text:
@@ -483,7 +483,7 @@ class LastZBot(fp.PoeBot):
 
     async def get_settings(self, setting: fp.SettingsRequest) -> fp.SettingsResponse:
         return fp.SettingsResponse(
-            server_bot_dependencies={"GPT-4": 1},  # Using GPT-4 for Render compatibility
+            server_bot_dependencies={"GPT-5-Chat": 1},  # Using GPT-5-Chat for Poe platform
             allow_attachments=True,           # ✅ Enable image uploads
             enable_image_comprehension=True,  # ✅ Auto image analysis
             introduction_message=f"🎮 Last Z Bot v0.8.1 (Render Hosted)! 🧪 Data collection POC with OpenAI embeddings search. Ask me anything about Last Z strategy! 🧟‍♂️💥\n\nDeployed: {deploy_time} | Hash: {deploy_hash[:4]}"
