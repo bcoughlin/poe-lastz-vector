@@ -548,8 +548,8 @@ def _load_legacy_hardcoded(data_path):
         if os.path.exists(dir_path):
             _load_json_directory(dir_path, directory)
 
-# Initialize knowledge base at startup
-load_knowledge_base()
+# Note: Knowledge base is loaded in app startup event (after disk is mounted)
+# See @app.on_event("startup") below
 
 def cosine_similarity(a, b):
     """Simple cosine similarity calculation"""
@@ -853,6 +853,13 @@ def create_app():
 
 # Create the FastAPI app instance
 app = create_app()
+
+@app.on_event("startup")
+async def startup_event():
+    """Load knowledge base after app starts (when disk is mounted)"""
+    print("🚀 App startup - loading knowledge base...")
+    load_knowledge_base()
+    print(f"✅ Startup complete - {len(knowledge_items)} knowledge items loaded")
 
 # Health check endpoint for Render
 @app.get("/health")
