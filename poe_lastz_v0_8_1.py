@@ -977,7 +977,7 @@ DO NOT attempt to answer from general knowledge. DO NOT make up hero names or ga
             server_bot_dependencies={"GPT-5-Chat": 1},  # Using GPT-5-Chat for Poe platform
             allow_attachments=True,           # ✅ Enable image uploads
             enable_image_comprehension=True,  # ✅ Auto image analysis
-            introduction_message=f"🎮 Last Z Bot v0.8.1 (Render Hosted)! 🧪 Data collection POC with OpenAI embeddings search. Ask me anything about Last Z strategy! 🧟‍♂️💥\n\nDeployed: {deploy_time} | Hash: {deploy_hash[:4]}"
+            introduction_message="🎮 Hey there! I'm your Last Z: Survival Shooter strategy expert! �‍♂️💥\n\nI can help you with:\n• Hero strategies & team builds 🦸‍♀️\n• Base building & upgrades 🏰\n• Research priorities 🔬\n• Combat tactics ⚔️\n• Screenshot analysis �\n\nDrop your questions or share screenshots - let's dominate the apocalypse together! 🔥"
         )
 
 # Create FastAPI app for Render deployment
