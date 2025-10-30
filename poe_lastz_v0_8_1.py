@@ -862,28 +862,47 @@ class LastZBot(fp.PoeBot):
         # Track tool calls for data collection
         tool_calls_made = []
         
-        # Simple knowledge search if query contains keywords
+        # ALWAYS run knowledge search for every query to prevent hallucinations
         search_result = None
-        print(f"🔎 Checking for search keywords in: {user_message.lower()}")
-        if any(keyword in user_message.lower() for keyword in ['hero', 'build', 'upgrade', 'strategy', 'research', 'headquarters', 'weapon', 'equipment']):
-            print(f"✅ Found keyword - triggering search")
-            tool_calls_made.append('search_lastz_knowledge')
-            search_result = search_lastz_knowledge(user_message)
-            print(f"🔍 Search result: {search_result}")
+        print(f"🔎 Running knowledge base search for: {user_message[:100]}...")
+        tool_calls_made.append('search_lastz_knowledge')
+        search_result = search_lastz_knowledge(user_message)
+        print(f"🔍 Search found {len(search_result.get('results', []))} results")
         
         # Create conversation for GPT
         conversation = [
             fp.ProtocolMessage(role="system", content=SYSTEM_PROMPT),
         ]
         
-        # Add search results if available
+        # Add search results if available - WITH EXPLICIT CONSTRAINTS
         if search_result and search_result.get('results'):
-            knowledge_context = "Based on my Last Z knowledge base:\n\n"
-            for result in search_result['results'][:2]:  # Limit to top 2 results
-                knowledge_context += f"• {result['title']}: {result['content']}\n"
+            knowledge_context = "=== KNOWLEDGE BASE SEARCH RESULTS ===\n"
+            knowledge_context += "You MUST base your answer ONLY on this information. DO NOT add information from your general knowledge.\n\n"
+            for idx, result in enumerate(search_result['results'][:3], 1):  # Top 3 results
+                knowledge_context += f"{idx}. {result['title']} (relevance: {result['similarity']:.2f})\n"
+                knowledge_context += f"   {result['content'][:300]}...\n\n"
             
             conversation.append(
                 fp.ProtocolMessage(role="system", content=knowledge_context)
+            )
+        else:
+            # NO RESULTS - Add explicit constraint to prevent hallucination
+            no_results_warning = """=== NO KNOWLEDGE BASE RESULTS FOUND ===
+
+CRITICAL: The knowledge base search returned no relevant results for this query.
+
+You MUST respond with:
+"I don't have specific information about that in my knowledge base. Could you rephrase your question or ask about:
+- Hero strategies (Sophia, Katrina, Evelyn, Fiona, etc.)
+- Building and HQ upgrades
+- Research priorities
+- Combat tactics
+- Resource management"
+
+DO NOT attempt to answer from general knowledge. DO NOT make up hero names or game features."""
+            
+            conversation.append(
+                fp.ProtocolMessage(role="system", content=no_results_warning)
             )
         
         # Add user messages from request
