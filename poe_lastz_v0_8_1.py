@@ -974,11 +974,13 @@ def create_app():
     print(f"🤖 Bot name: {bot_name}")
     print(f"🏠 Hosting: Render")
     
+    # Note: Not passing bot_name to fp.make_app to avoid "asyncio.run() cannot be called 
+    # from a running event loop" error during startup. Bot settings can be synced manually
+    # using the sync_settings.py script if needed. The bot still works without auto-sync.
     app = fp.make_app(
         bot, 
-        access_key=bot_access_key, 
-        bot_name=bot_name,
-        allow_without_key=not (bot_access_key and bot_name)  # Allow fallback during development
+        access_key=bot_access_key,
+        allow_without_key=not bot_access_key  # Allow fallback during development
     )
     
     return app
