@@ -201,6 +201,9 @@ except Exception as e:
 # Knowledge base loaded from data files
 knowledge_items = []
 
+# Cache for pre-computed embeddings (populated at startup)
+knowledge_embeddings = {}
+
 def load_knowledge_base():
     """Load comprehensive knowledge base from data directory (Render compatible)"""
     global knowledge_items
@@ -580,15 +583,140 @@ def get_openai_embedding(text: str) -> List[float]:
         print(f"❌ OpenAI embedding error: {e}")
         return []
 
+def get_embeddings_cache_path():
+    """Get the path to the embeddings cache file on Render Disk"""
+    # Try Render Disk first, fall back to temp for local dev
+    cache_locations = [
+        "/mnt/data/lastz-rag/embeddings_cache.json",  # Render Disk (persistent)
+        "/tmp/embeddings_cache.json"  # Fallback for local dev
+    ]
+    
+    for path in cache_locations:
+        dir_path = os.path.dirname(path)
+        if os.path.exists(dir_path) and os.access(dir_path, os.W_OK):
+            return path
+    
+    # Last resort - current directory
+    return "embeddings_cache.json"
+
+def calculate_knowledge_hash():
+    """Calculate hash of knowledge base to detect changes"""
+    # Create a deterministic string from all knowledge items
+    content = ""
+    for item in sorted(knowledge_items, key=lambda x: x.get('name', '')):
+        content += f"{item.get('type', '')}:{item.get('name', '')}:{item.get('text', '')[:100]}"
+    
+    return hashlib.md5(content.encode()).hexdigest()
+
+def load_embeddings_from_disk():
+    """Load cached embeddings from disk if available and valid"""
+    global knowledge_embeddings
+    
+    cache_path = get_embeddings_cache_path()
+    
+    if not os.path.exists(cache_path):
+        print(f"📂 No embeddings cache found at {cache_path}")
+        return False
+    
+    try:
+        print(f"📂 Loading embeddings cache from {cache_path}")
+        with open(cache_path, 'r') as f:
+            cache_data = json.load(f)
+        
+        # Verify cache is valid for current knowledge base
+        cached_hash = cache_data.get('knowledge_hash', '')
+        current_hash = calculate_knowledge_hash()
+        
+        if cached_hash != current_hash:
+            print(f"⚠️  Cache invalid - knowledge base changed (hash mismatch)")
+            print(f"   Cached: {cached_hash[:8]}... Current: {current_hash[:8]}...")
+            return False
+        
+        knowledge_embeddings = cache_data.get('embeddings', {})
+        cache_version = cache_data.get('version', 'unknown')
+        
+        print(f"✅ Loaded {len(knowledge_embeddings)} embeddings from disk cache")
+        print(f"   Cache version: {cache_version}, hash: {current_hash[:8]}...")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error loading embeddings cache: {e}")
+        return False
+
+def save_embeddings_to_disk():
+    """Save embeddings cache to disk for persistence across restarts"""
+    cache_path = get_embeddings_cache_path()
+    
+    try:
+        cache_data = {
+            'version': '0.8.1',
+            'timestamp': datetime.now().isoformat(),
+            'knowledge_hash': calculate_knowledge_hash(),
+            'embeddings_count': len(knowledge_embeddings),
+            'embeddings': knowledge_embeddings
+        }
+        
+        print(f"💾 Saving embeddings cache to {cache_path}")
+        with open(cache_path, 'w') as f:
+            json.dump(cache_data, f)
+        
+        # Get file size for logging
+        file_size = os.path.getsize(cache_path) / (1024 * 1024)  # MB
+        print(f"✅ Saved {len(knowledge_embeddings)} embeddings to disk ({file_size:.2f} MB)")
+        
+    except Exception as e:
+        print(f"❌ Error saving embeddings cache: {e}")
+
+def precompute_knowledge_embeddings():
+    """Pre-compute embeddings for all knowledge items (with disk caching)"""
+    global knowledge_embeddings
+    
+    # Try to load from disk first
+    if load_embeddings_from_disk():
+        print("🚀 Using cached embeddings from disk - no API calls needed!")
+        return
+    
+    # Cache miss or invalid - generate embeddings
+    knowledge_embeddings = {}
+    print(f"🔄 Generating embeddings for {len(knowledge_items)} knowledge items...")
+    print(f"   (This only happens when knowledge base changes)")
+    start_time = time.time()
+    
+    for idx, item in enumerate(knowledge_items):
+        # Get the searchable text from the item
+        searchable_text = item.get("text", "")
+        if not searchable_text:
+            continue
+        
+        # Generate a unique key for this item
+        item_key = f"{item.get('type', 'unknown')}_{item.get('name', 'unnamed')}_{idx}"
+        
+        # Get embedding for knowledge item
+        item_embedding = get_openai_embedding(searchable_text)
+        if item_embedding:
+            knowledge_embeddings[item_key] = item_embedding
+            
+        # Progress indicator every 20 items
+        if (idx + 1) % 20 == 0:
+            print(f"   ⏳ Progress: {idx + 1}/{len(knowledge_items)} items embedded...")
+    
+    elapsed_time = time.time() - start_time
+    print(f"✅ Generated {len(knowledge_embeddings)} embeddings in {elapsed_time:.2f}s")
+    print(f"   Average: {elapsed_time/len(knowledge_embeddings):.3f}s per embedding")
+    
+    # Save to disk for next restart
+    save_embeddings_to_disk()
+
+
 def search_lastz_knowledge(user_query):
     """Search using OpenAI embeddings with comprehensive knowledge base"""
     start_time = time.time()
     
     try:
         print(f"🔧 OpenAI embedding search called: '{user_query}'")
-        print(f"📚 Searching {len(knowledge_items)} knowledge items")
+        print(f"📚 Searching {len(knowledge_items)} knowledge items using cached embeddings")
         
-        # Get embedding for user query
+        # Get embedding for user query (only 1 API call per query)
         query_embedding = get_openai_embedding(user_query)
         if not query_embedding:
             return {
@@ -599,16 +727,15 @@ def search_lastz_knowledge(user_query):
         
         results = []
         
-        # Calculate similarity with each knowledge item
-        for item in knowledge_items:
-            # Get the searchable text from the item
-            searchable_text = item.get("text", "")
-            if not searchable_text:
-                continue
+        # Calculate similarity with each knowledge item using cached embeddings
+        for idx, item in enumerate(knowledge_items):
+            # Generate the same key used during pre-computation
+            item_key = f"{item.get('type', 'unknown')}_{item.get('name', 'unnamed')}_{idx}"
             
-            # Get embedding for knowledge item
-            item_embedding = get_openai_embedding(searchable_text)
+            # Get pre-computed embedding from cache
+            item_embedding = knowledge_embeddings.get(item_key)
             if not item_embedding:
+                # Skip items without cached embeddings
                 continue
                 
             # Calculate cosine similarity
@@ -616,6 +743,7 @@ def search_lastz_knowledge(user_query):
             
             if similarity > 0.2:  # Similarity threshold
                 # Extract content for display
+                searchable_text = item.get("text", "")
                 content = searchable_text
                 if 'data' in item and isinstance(item['data'], dict):
                     if 'content' in item['data']:
@@ -633,7 +761,7 @@ def search_lastz_knowledge(user_query):
         results = results[:5]  # Increased from 3 to 5 for better context
         
         search_time = time.time() - start_time
-        print(f"⚡ OpenAI embedding search: {len(results)} results in {search_time:.2f}s")
+        print(f"⚡ OpenAI embedding search: {len(results)} results in {search_time:.2f}s (using cache)")
         if results:
             print(f"   Top result: {results[0]['title']} (similarity: {results[0]['similarity']:.3f})")
         
@@ -863,7 +991,12 @@ async def startup_event():
     """Load knowledge base after app starts (when disk is mounted)"""
     print("🚀 App startup - loading knowledge base...")
     load_knowledge_base()
-    print(f"✅ Startup complete - {len(knowledge_items)} knowledge items loaded")
+    print(f"✅ Knowledge base loaded - {len(knowledge_items)} items")
+    
+    # Pre-compute embeddings for all knowledge items (one-time cost at startup)
+    print("🔄 Pre-computing embeddings for knowledge base...")
+    precompute_knowledge_embeddings()
+    print(f"✅ Startup complete - {len(knowledge_items)} items with {len(knowledge_embeddings)} cached embeddings")
 
 # Health check endpoint for Render
 @app.get("/health")
@@ -874,7 +1007,8 @@ async def health_check():
         "hosting": "render",
         "timestamp": datetime.now().isoformat(),
         "deploy_hash": deploy_hash,
-        "knowledge_items": len(knowledge_items)
+        "knowledge_items": len(knowledge_items),
+        "cached_embeddings": len(knowledge_embeddings)
     }
 
 @app.post("/admin/refresh-data")
