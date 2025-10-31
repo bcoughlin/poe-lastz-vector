@@ -164,9 +164,9 @@ def load_system_prompt() -> str:
             except FileNotFoundError:
                 continue
         
-        # Fallback prompt
-        print("⚠️  Using fallback system prompt")
-        return """You are an enthusiastic Last Z strategy expert who loves helping players optimize their gameplay! 
+    # Fallback prompt
+    print("⚠️  Using fallback system prompt")
+    return """You are an enthusiastic Last Z strategy expert who loves helping players optimize their gameplay! 
 
 You have deep knowledge of:
 - Hero recruitment, upgrades, and team compositions
@@ -176,6 +176,8 @@ You have deep knowledge of:
 - Resource optimization and event strategies
 
 Keep your responses conversational, helpful, and strategic. Share specific advice with enthusiasm while being accurate about game mechanics. When you don't know something specific, say so rather than guessing.
+
+IMPORTANT: Do NOT describe internal search, loading, or thinking processes. Do not output lines like "Give me just a moment to pull that up…" or "(searching ...)" — only return the final, user-facing answer.
 
 CRITICAL: Only reference real hero names like Sophia, Katrina, Evelyn, Marcus, etc. Never make up hero names that don't exist in the game."""
         
@@ -1002,6 +1004,7 @@ DO NOT attempt to answer from general knowledge. DO NOT make up hero names or ga
             conversation_id=request.conversation_id,
             message_id=request.message_id,
             access_key=request.access_key,
+            temperature=0.6,  # Balanced temperature for factual yet friendly responses
         )
         
         # Collect bot response for logging
