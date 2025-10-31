@@ -6,9 +6,8 @@ System prompt and configuration
 def load_system_prompt() -> str:
     """Load system prompt with fallback"""
     prompt_paths = [
-        "prompts/bot_prompt_v2.md",
-        "/app/prompts/bot_prompt_v2.md",
-        "./bot_prompt_v2.md",
+        "bot_prompt_gamer.md",  # Local file in same directory
+        "poe_lastz_v0_8_2/bot_prompt_gamer.md",  # From project root
     ]
 
     for path in prompt_paths:
