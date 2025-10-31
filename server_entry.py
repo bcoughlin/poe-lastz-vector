@@ -97,7 +97,8 @@ def load_latest_server():
     
     # Return the FastAPI app
     if hasattr(server_module, 'app'):
-        print(f"✅ Loaded FastAPI app from {latest_dir.name}")
+        print(f"✅ FastAPI app loaded from {latest_dir.name}")
+        print("⏳ Deployment continuing - initializing knowledge base...")
         return server_module.app
     else:
         raise RuntimeError(f"No 'app' attribute found in {server_path}")
@@ -105,8 +106,11 @@ def load_latest_server():
 
 # Load the app from the latest version
 try:
+    print("🔄 Build successful - Deployment starting...")
+    print("📦 Loading dynamic server entry point...")
     app = load_latest_server()
     print("🎯 Dynamic server loading complete!")
+    print("🚀 Deployment ready - Starting application server...")
 except Exception as e:
-    print(f"❌ Failed to load server: {e}")
+    print(f"❌ Deployment failed during server loading: {e}")
     raise

@@ -17,16 +17,17 @@ from datetime import datetime
 import openai
 
 import fastapi_poe as fp
-from bot_symlink import knowledge_base
+
+from . import knowledge_base
 
 # Import utility modules
-from bot_symlink.logger import (
+from .logger import (
     create_interaction_log,
     download_and_store_image,
     log_interaction_to_console,
     store_interaction_data,
 )
-from bot_symlink.prompts import load_system_prompt
+from .prompts import load_system_prompt
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
