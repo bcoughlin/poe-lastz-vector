@@ -375,6 +375,7 @@ def _load_from_data_index(data_path, data_index_path, stats):
             _load_json_directory(dir_path, dir_name, stats)
         else:
             print(f"⚠️ Directory not found: {dir_path}")
+            stats['errors'].append(f"JSON directory '{dir_name}' not found at {dir_path}")
     
     # Load individual JSON files
     for file_path in config['dynamic_json_files']:
@@ -402,16 +403,21 @@ def _load_from_data_index(data_path, data_index_path, stats):
         # Check both relative to data_path and absolute
         possible_paths = [
             os.path.join(data_path, dir_name),
-            os.path.join(data_path, "..", dir_name),  # kb/ is at root level
+            os.path.join(data_path, "..", dir_name),  # For directories at repo root
             os.path.join(os.path.dirname(data_path), dir_name)
         ]
         
+        found = False
         for dir_path in possible_paths:
             if os.path.exists(dir_path):
+                print(f"✅ Found markdown directory: {dir_name} at {dir_path}")
                 _load_markdown_directory(dir_path, dir_name, stats)
+                found = True
                 break
-        else:
+        
+        if not found:
             print(f"⚠️ Markdown directory not found: {dir_name}")
+            stats['errors'].append(f"Markdown directory '{dir_name}' not found in any search path")
 
 def _load_json_directory(dir_path, dir_name, stats):
     """Load all JSON files from a directory"""
