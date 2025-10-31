@@ -17,7 +17,7 @@ from datetime import datetime
 import openai
 
 import fastapi_poe as fp
-from bot_symlink.knowledge_base import knowledge_items, load_knowledge_base
+from bot_symlink import knowledge_base
 
 # Import utility modules
 from bot_symlink.logger import (
@@ -121,7 +121,7 @@ def calculate_knowledge_hash():
     """Calculate hash of knowledge base to detect changes"""
     # Create a deterministic string from all knowledge items
     content = ""
-    for item in sorted(knowledge_items, key=lambda x: x.get("name", "")):
+    for item in sorted(knowledge_base.knowledge_items, key=lambda x: x.get("name", "")):
         content += f"{item.get('type', '')}:{item.get('name', '')}:{item.get('text', '')[:100]}"
 
     return hashlib.md5(content.encode()).hexdigest()
@@ -201,11 +201,13 @@ def precompute_knowledge_embeddings():
 
     # Cache miss or invalid - generate embeddings
     knowledge_embeddings = {}
-    print(f"🔄 Generating embeddings for {len(knowledge_items)} knowledge items...")
+    print(
+        f"🔄 Generating embeddings for {len(knowledge_base.knowledge_items)} knowledge items..."
+    )
     print("   (This only happens when knowledge base changes)")
     start_time = time.time()
 
-    for idx, item in enumerate(knowledge_items):
+    for idx, item in enumerate(knowledge_base.knowledge_items):
         # Get the searchable text from the item
         searchable_text = item.get("text", "")
         if not searchable_text:
@@ -221,11 +223,18 @@ def precompute_knowledge_embeddings():
 
         # Progress indicator every 20 items
         if (idx + 1) % 20 == 0:
-            print(f"   ⏳ Progress: {idx + 1}/{len(knowledge_items)} items embedded...")
+            print(
+                f"   ⏳ Progress: {idx + 1}/{len(knowledge_base.knowledge_items)} items embedded..."
+            )
 
     elapsed_time = time.time() - start_time
     print(f"✅ Generated {len(knowledge_embeddings)} embeddings in {elapsed_time:.2f}s")
-    print(f"   Average: {elapsed_time / len(knowledge_embeddings):.3f}s per embedding")
+    if len(knowledge_embeddings) > 0:
+        print(
+            f"   Average: {elapsed_time / len(knowledge_embeddings):.3f}s per embedding"
+        )
+    else:
+        print("   ⚠️ No embeddings generated - knowledge_items appears to be empty")
 
     # Save to disk for next restart
     save_embeddings_to_disk()
@@ -238,7 +247,7 @@ def search_lastz_knowledge(user_query):
     try:
         print(f"🔧 OpenAI embedding search called: '{user_query}'")
         print(
-            f"📚 Searching {len(knowledge_items)} knowledge items using cached embeddings"
+            f"📚 Searching {len(knowledge_base.knowledge_items)} knowledge items using cached embeddings"
         )
 
         # Get embedding for user query (only 1 API call per query)
@@ -253,7 +262,7 @@ def search_lastz_knowledge(user_query):
         results = []
 
         # Calculate similarity with each knowledge item using cached embeddings
-        for idx, item in enumerate(knowledge_items):
+        for idx, item in enumerate(knowledge_base.knowledge_items):
             # Generate the same key used during pre-computation
             item_key = (
                 f"{item.get('type', 'unknown')}_{item.get('name', 'unnamed')}_{idx}"
@@ -594,14 +603,14 @@ app = create_app()
 async def startup_event():
     """Load knowledge base after app starts (when disk is mounted)"""
     print("🚀 App startup - loading knowledge base...")
-    load_knowledge_base()
-    print(f"✅ Knowledge base loaded - {len(knowledge_items)} items")
+    knowledge_base.load_knowledge_base()
+    print(f"✅ Knowledge base loaded - {len(knowledge_base.knowledge_items)} items")
 
     # Pre-compute embeddings for all knowledge items (one-time cost at startup)
     print("🔄 Pre-computing embeddings for knowledge base...")
     precompute_knowledge_embeddings()
     print(
-        f"✅ Startup complete - {len(knowledge_items)} items with {len(knowledge_embeddings)} cached embeddings"
+        f"✅ Startup complete - {len(knowledge_base.knowledge_items)} items with {len(knowledge_embeddings)} cached embeddings"
     )
 
 
@@ -614,7 +623,7 @@ async def health_check():
         "hosting": "render",
         "timestamp": datetime.now().isoformat(),
         "deploy_hash": deploy_hash,
-        "knowledge_items": len(knowledge_items),
+        "knowledge_items": len(knowledge_base.knowledge_items),
         "cached_embeddings": len(knowledge_embeddings),
         "enhancements": "Full JSON data delivery for structured content",
     }
@@ -641,11 +650,11 @@ async def refresh_data(api_key: str):
 
         if result.returncode == 0:
             # Reload knowledge base
-            old_count = len(knowledge_items)
+            old_count = len(knowledge_base.knowledge_items)
             old_embeddings = len(knowledge_embeddings)
 
-            load_knowledge_base()
-            new_count = len(knowledge_items)
+            knowledge_base.load_knowledge_base()
+            new_count = len(knowledge_base.knowledge_items)
 
             # CRITICAL: Regenerate embeddings for new/changed data
             print("🔄 Regenerating embeddings after data refresh...")
