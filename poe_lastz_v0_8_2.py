@@ -1138,14 +1138,29 @@ async def refresh_data(api_key: str):
         if result.returncode == 0:
             # Reload knowledge base
             old_count = len(knowledge_items)
+            old_embeddings = len(knowledge_embeddings)
+            
             load_knowledge_base()
             new_count = len(knowledge_items)
+            
+            # CRITICAL: Regenerate embeddings for new/changed data
+            print("🔄 Regenerating embeddings after data refresh...")
+            precompute_knowledge_embeddings()
+            new_embeddings = len(knowledge_embeddings)
             
             return {
                 "status": "success",
                 "git_output": result.stdout,
-                "old_count": old_count,
-                "new_count": new_count,
+                "knowledge_items": {
+                    "old": old_count,
+                    "new": new_count,
+                    "changed": new_count - old_count
+                },
+                "embeddings": {
+                    "old": old_embeddings,
+                    "new": new_embeddings,
+                    "regenerated": new_embeddings > 0
+                },
                 "timestamp": datetime.now().isoformat()
             }
         else:
