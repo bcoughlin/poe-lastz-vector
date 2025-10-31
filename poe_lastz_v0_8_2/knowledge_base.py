@@ -99,36 +99,51 @@ def _parse_data_index(data_index_path):
         # Simple parsing of YAML-like structure in markdown
         lines = content.split("\n")
         current_section = None
+        current_subsection = None  # Track whether we're in directories: or files:
 
         for line in lines:
+            # Main section detection
             if "core_static:" in line:
                 current_section = "core_static"
-            elif "directories:" in line and current_section != "core_static":
-                current_section = "dynamic_json_dirs"
-            elif "files:" in line and current_section != "core_static":
-                current_section = "dynamic_json_files"
+                current_subsection = None
+            elif "dynamic_json:" in line:
+                current_section = "dynamic_json"
+                current_subsection = None
             elif "dynamic_markdown:" in line:
                 current_section = "dynamic_markdown"
+                current_subsection = None
+            # Subsection detection
+            elif "directories:" in line:
+                current_subsection = "directories"
+            elif "files:" in line:
+                current_subsection = "files"
+            # Data extraction
             elif "- file:" in line and current_section == "core_static":
                 # Extract file path
                 parts = line.split('"')
                 if len(parts) >= 2:
                     config["core_static"].append(parts[1])
-            elif "- path:" in line and current_section == "dynamic_json_dirs":
-                # Extract directory path
+            elif "- path:" in line and current_section == "dynamic_json":
+                # Extract path from dynamic_json section
                 parts = line.split('"')
                 if len(parts) >= 2:
-                    config["dynamic_json_dirs"].append(parts[1].rstrip("/"))
-            elif "- path:" in line and current_section == "dynamic_json_files":
-                # Extract file path
-                parts = line.split('"')
-                if len(parts) >= 2:
-                    config["dynamic_json_files"].append(parts[1])
+                    path = parts[1].rstrip("/")
+                    if current_subsection == "directories":
+                        config["dynamic_json_dirs"].append(path)
+                    elif current_subsection == "files":
+                        config["dynamic_json_files"].append(path)
             elif "- path:" in line and current_section == "dynamic_markdown":
-                # Extract directory path
+                # Extract directory path from dynamic_markdown section
                 parts = line.split('"')
                 if len(parts) >= 2:
                     config["dynamic_markdown_dirs"].append(parts[1].rstrip("/"))
+
+        # Debug logging
+        print("🔍 Parsed data_index.md:")
+        print(f"   Core static files: {len(config['core_static'])}")
+        print(f"   JSON directories: {config['dynamic_json_dirs']}")
+        print(f"   JSON files: {len(config['dynamic_json_files'])}")
+        print(f"   Markdown directories: {config['dynamic_markdown_dirs']}")
 
         return config
     except Exception as e:
