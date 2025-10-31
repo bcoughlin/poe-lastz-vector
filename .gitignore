@@ -29,6 +29,13 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+# Type checking and linting
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
 # Virtual environments
 venv/
 env/
