@@ -18,16 +18,17 @@ import openai
 
 import fastapi_poe as fp
 
-from . import knowledge_base
+# Import from local module using absolute import
+import poe_lastz_v0_8_2.knowledge_base as knowledge_base
 
 # Import utility modules
-from .logger import (
+from poe_lastz_v0_8_2.logger import (
     create_interaction_log,
     download_and_store_image,
     log_interaction_to_console,
     store_interaction_data,
 )
-from .prompts import load_system_prompt
+from poe_lastz_v0_8_2.prompts import load_system_prompt
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
