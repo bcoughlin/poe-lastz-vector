@@ -164,9 +164,9 @@ def load_system_prompt() -> str:
             except FileNotFoundError:
                 continue
         
-    # Fallback prompt
-    print("⚠️  Using fallback system prompt")
-    return """You are an enthusiastic Last Z strategy expert who loves helping players optimize their gameplay! 
+        # Fallback prompt
+        print("⚠️  Using fallback system prompt")
+        return """You are an enthusiastic Last Z strategy expert who loves helping players optimize their gameplay! 
 
 You have deep knowledge of:
 - Hero recruitment, upgrades, and team compositions
@@ -179,9 +179,23 @@ Keep your responses conversational, helpful, and strategic. Share specific advic
 
 IMPORTANT: Do NOT describe internal search, loading, or thinking processes. Do not output lines like "Give me just a moment to pull that up…" or "(searching ...)" — only return the final, user-facing answer.
 
-CRITICAL: Only reference real hero names like Sophia, Katrina, Evelyn, Marcus, etc. Never make up hero names that don't exist in the game."""
-        
-    except Exception as e:
+ANTI-HALLUCINATION RULES (CRITICAL):
+1. You will receive specific knowledge base search results in your context
+2. You MUST ONLY use information from those search results
+3. If asked about heroes/buildings/research NOT in the search results, say "I don't have information about that in my current knowledge base"
+4. NEVER make up stat numbers, hero names, building names, or game mechanics
+5. If uncertain, always err on the side of saying you don't know rather than guessing
+6. Real hero names include: Sophia, Katrina, Evelyn, Marcus, Javier, Emma, etc. - but ONLY reference them if they appear in your search results
+
+Example CORRECT responses:
+- "Based on the data, Sophia at level 60 has X attack and Y defense..."
+- "I don't see information about that hero in my current sources"
+- "Let me check what I have about building upgrades... [uses search results]"
+
+Example WRONG responses (NEVER DO THIS):
+- "Thor is a great tank hero..." (Thor doesn't exist)
+- "At level 70, heroes get..." (making up stats not in search results)
+- "The best strategy is..." (without citing specific search results)"""    except Exception as e:
         print(f"❌ Error loading prompt: {e}")
         return "You are a Last Z strategy expert. Help players with accurate, enthusiastic advice!"
 
@@ -950,10 +964,11 @@ class LastZBot(fp.PoeBot):
         # Add search results if available - ENHANCED FOR v0.8.2
         if search_result and search_result.get('results'):
             knowledge_context = "=== KNOWLEDGE BASE SEARCH RESULTS ===\n"
-            knowledge_context += "You MUST base your answer ONLY on this information. DO NOT add information from your general knowledge.\n\n"
+            knowledge_context += "⚠️ CRITICAL: You MUST base your answer ONLY on the information below. DO NOT add information from your general knowledge or training data.\n"
+            knowledge_context += "⚠️ If the user asks about something NOT in these results, say 'I don't have information about that in my knowledge base.'\n\n"
             
             for idx, result in enumerate(search_result['results'][:3], 1):  # Top 3 results
-                knowledge_context += f"{idx}. {result['title']} (type: {result['type']}, relevance: {result['similarity']:.2f})\n"
+                knowledge_context += f"📄 SOURCE {idx}: {result['title']} (type: {result['type']}, relevance: {result['similarity']:.2f})\n"
                 
                 # For structured data, provide clear formatting
                 if result.get('is_structured'):
@@ -963,9 +978,11 @@ class LastZBot(fp.PoeBot):
                         knowledge_context += f"   {line}\n"
                 else:
                     # For text/markdown content
-                    knowledge_context += f"   {result['content'][:500]}...\n"
+                    knowledge_context += f"   {result['content'][:1000]}...\n"
                 
                 knowledge_context += "\n"
+            
+            knowledge_context += "⚠️ REMINDER: Only use information from the sources above. Do not invent stats, names, or mechanics.\n"
             
             conversation.append(
                 fp.ProtocolMessage(role="system", content=knowledge_context)
@@ -1018,6 +1035,15 @@ DO NOT attempt to answer from general knowledge. DO NOT make up hero names or ga
             if hasattr(msg, 'text') and msg.text:
                 bot_response_parts.append(msg.text)
             yield msg
+        
+        # Add debug footer showing sources used (helps detect hallucinations)
+        if search_result and search_result.get('results'):
+            source_names = [r['title'] for r in search_result['results'][:3]]
+            footer = f"\n\n*📚 Sources: {', '.join(source_names)}*"
+            yield fp.PartialResponse(text=footer)
+        else:
+            footer = "\n\n*⚠️ No knowledge base sources found for this query*"
+            yield fp.PartialResponse(text=footer)
         
         # Calculate response time and create interaction log
         response_time = time.time() - start_time
