@@ -2,8 +2,10 @@
 """
 Manual bot settings sync script for LastZBetaV7_1
 """
-import fastapi_poe as fp
+
 import requests
+
+import fastapi_poe as fp
 
 bot_name = "LastZBetaV7_1"
 access_key = "fz6Uq6jWbkB9DCq3RVnSxsMiyGlwmmR7"
@@ -18,7 +20,7 @@ try:
     print(f"Sync result: {result}")
 except Exception as e:
     print(f"Sync failed: {e}")
-    
+
     # Try direct test of settings endpoint
     print("\nTesting settings endpoint directly...")
     try:
@@ -26,9 +28,9 @@ except Exception as e:
             endpoint_url,
             headers={
                 "Content-Type": "application/json",
-                "Authorization": f"Bearer {access_key}"
+                "Authorization": f"Bearer {access_key}",
             },
-            json={"version": "1.0", "type": "settings"}
+            json={"version": "1.0", "type": "settings"},
         )
         print(f"Direct test status: {response.status_code}")
         print(f"Direct test response: {response.text}")

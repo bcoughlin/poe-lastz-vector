@@ -1,70 +1,80 @@
 # Last Z Vector RAG Bot
 
-A Poe bot for Last Z: Survival Shooter using vector-based Retrieval Augmented Generation with dynamic data loading from Modal volumes.
+A Poe bot for Last Z: Survival Shooter using vector-based Retrieval Augmented Generation with dynamic data loading from Render disk.
 
-## Purpose
-This project implements vector embeddings and semantic search for game knowledge retrieval, with dynamic data loading from the lastz-rag repository.
+## Quick Links
+
+- 📐 **[ARCHITECTURE.md](ARCHITECTURE.md)** - Project structure, module design, symlink pattern
+- 📝 **[notes/](notes/)** - Historical planning documents and development notes
 
 ## Key Features
-- **Dynamic Knowledge Loading**: Automatically loads data from Modal volumes
-- **Vector Search**: Semantic search with sentence-transformers
-- **Tool-Based Architecture**: GPT-5 tool calling for intelligent interactions
-- **No Static Fallbacks**: Pure dynamic loading to verify system integrity
 
-## Setup & Deployment
+- **Dynamic Knowledge Loading**: Automatically loads data from Render disk
+- **Vector Search**: Semantic search with OpenAI embeddings
+- **Anti-Hallucination**: Debug footer showing sources + strengthened system prompts
+- **Disk-Cached Embeddings**: Persistent across restarts for fast startup
+- **Symlink Versioning**: Easy version switching without config changes
 
-### 1. Data Volume Setup (CRITICAL)
-The bot requires a Modal volume with lastz-rag data. **This must be done before deployment:**
+## Development Setup
+
+### 1. Install Dependencies
+```bash
+make install
+# or
+pip install -r requirements_render.txt
+```
+
+### 2. Setup Git Hooks (Recommended)
+Automatically runs linting checks before each commit:
+```bash
+bash scripts/setup-hooks.sh
+```
+
+### 3. Development Commands
+```bash
+make help           # Show all available commands
+make lint          # Run linting checks
+make lint-fix      # Auto-fix linting issues
+make format        # Format code with ruff
+make check         # Run all pre-commit checks
+make clean         # Clean up cache files
+```
+
+## Deployment
+
+### Production (Render)
+The bot is deployed to Render with automatic data syncing:
 
 ```bash
-# Upload lastz-rag data to Modal volume
-cd /Users/bradleycoughlin/local_code
-modal volume put lastz-data lastz-rag/data /
+# Render automatically runs on deploy:
+bash sync_data.sh && python -m uvicorn bot_symlink.server:app --host 0.0.0.0 --port $PORT
 ```
 
-**Note**: If you get "already exists" error, the data is already uploaded. This is expected after first setup.
+**Current version**: v0.8.2 via `bot_symlink` → `poe_lastz_v0_8_2/`
 
-### 2. Deploy Bot
-```bash
-cd poe-lastz-vector
-modal deploy poe_lastz_v7.py
+**Production URL**: https://poe-lastz-v0-8-1.onrender.com
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for details on the symlink versioning pattern and how to switch versions.
+
+## Project Structure
+
+```
+poe-lastz-vector/
+├── bot_symlink/           # → poe_lastz_v0_8_2/ (active version)
+├── poe_lastz_v0_8_2/     # Current production code
+│   ├── server.py         # Main entry point
+│   ├── knowledge_base.py # Data loading
+│   ├── logger.py         # Interaction logging
+│   └── prompts.py        # System prompts
+├── Makefile              # Development commands
+└── scripts/              # Setup scripts
 ```
 
-### 3. Volume Management
-```bash
-# List volume contents
-modal volume ls lastz-data
-
-# Check volume status
-modal volume list
-```
-
-## Architecture
-- **Modal Volumes**: Dynamic data storage and loading
-- **Index-Driven**: Uses `data_index.md` for automatic file discovery
-- **Hybrid Loading**: Core static files + dynamic JSON/markdown directories
-- **Vector Search**: sentence-transformers 'all-MiniLM-L6-v2' model
-- **No Fallbacks**: Returns clear error messages if dynamic loading fails
-
-## Data Structure
-```
-/app/data/
-├── core/
-│   ├── data_index.md      # Loading configuration
-│   ├── game_fundamentals.md
-│   └── terminology.md
-├── heroes/                # Dynamic JSON files
-├── buildings/             # Dynamic JSON files
-└── research/              # Dynamic markdown files
-```
+Full architecture details in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Troubleshooting
-- **"No knowledge available"**: Volume data not uploaded or mount failed
-- **"Dynamic loading failed"**: Check Modal volume status and file permissions
-- **Vector search errors**: Logs will show specific sentence-transformers issues
 
-## Status
-✅ Working dynamic data loading from Modal volumes
-✅ Vector search with semantic understanding
-✅ Tool calling with GPT-5 integration
-✅ Pure dynamic architecture (no static fallbacks)
+- **Import errors**: Check `bot_symlink` points to correct version with `ls -la bot_symlink`
+- **Linting errors**: Run `make lint-fix` to auto-fix most issues
+- **Data loading fails**: Check `sync_data.sh` executed successfully and `/mnt/data` mounted
+- **Embeddings cache errors**: Delete `embeddings_cache.pkl` and restart

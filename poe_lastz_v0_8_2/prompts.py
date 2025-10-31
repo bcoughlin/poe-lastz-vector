@@ -2,30 +2,31 @@
 System prompt and configuration
 """
 
+
 def load_system_prompt() -> str:
     """Load system prompt with fallback"""
     prompt_paths = [
         "prompts/bot_prompt_v2.md",
         "/app/prompts/bot_prompt_v2.md",
-        "./bot_prompt_v2.md"
+        "./bot_prompt_v2.md",
     ]
-    
+
     for path in prompt_paths:
         try:
-            with open(path, 'r', encoding='utf-8') as f:
+            with open(path, encoding="utf-8") as f:
                 content = f.read()
                 print(f"✅ Loaded prompt from: {path}")
                 return content.strip()
         except FileNotFoundError:
             continue
-    
+
     # Fallback prompt
     print("⚠️  Using fallback system prompt")
-    return """You are an enthusiastic Last Z strategy expert who loves helping players optimize their gameplay! 
+    return """You are an enthusiastic Last Z strategy expert who loves helping players optimize their gameplay!
 
 You have deep knowledge of:
 - Hero recruitment, upgrades, and team compositions
-- Building placement and headquarters progression  
+- Building placement and headquarters progression
 - Research priorities and tech trees
 - Combat strategies and troop management
 - Resource optimization and event strategies
