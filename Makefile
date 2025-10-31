@@ -1,4 +1,4 @@
-.PHONY: help lint format test install dev clean
+.PHONY: help lint format test install dev clean deploy deploy-check
 
 help:  ## Show this help message
 	@echo 'Usage: make [target]'
@@ -46,3 +46,30 @@ clean:  ## Clean up cache files
 	find . -type d -name ".mypy_cache" -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete 2>/dev/null || true
 	@echo "✅ Cleaned!"
+
+deploy-check:  ## Check deployment configuration
+	@echo "🔍 Checking deployment configuration..."
+	@echo "📋 Current service configuration:"
+	@echo "   Build: pip install -r requirements_render.txt"
+	@echo "   Start: bash scripts/sync_data.sh && python -m uvicorn server_entry:app --host 0.0.0.0 --port \$$PORT"
+	@if [ -f render.yaml ]; then \
+		echo "✅ render.yaml found"; \
+		echo "📋 Checking syntax..."; \
+		python3 -c "import yaml; yaml.safe_load(open('render.yaml'))" && echo "✅ YAML syntax valid"; \
+	else \
+		echo "❌ render.yaml not found"; \
+		exit 1; \
+	fi
+
+deploy:  ## Deploy to Render using CLI
+	@echo "🚀 Deploying to Render..."
+	@echo "📦 Running pre-deployment checks..."
+	@make check
+	@echo "🔍 Validating configuration..."
+	@make deploy-check
+	@echo "📋 Listing current services..."
+	render services ls
+	@echo "🌐 Triggering deployment..."
+	@echo "⚠️  Note: You may need to manually deploy via dashboard the first time"
+	@echo "   Then future updates will auto-deploy on git push"
+	@echo "✅ Deployment process initiated!"

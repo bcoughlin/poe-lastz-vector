@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: poe-lastz-v0-8-2
+    name: poe-lastz-prod
     env: python
     buildCommand: pip install -r requirements_render.txt
     # Dynamic server entry point - automatically detects latest version
@@ -16,7 +16,8 @@ services:
         sync: false  # Set manually in Render dashboard
       - key: OPENAI_API_KEY
         sync: false  # Set manually in Render dashboard
-    instanceType: starter
+    plan: standard  # Explicit plan specification
+    region: oregon  # Explicit region
     healthCheckPath: /health
     disk:
       name: lastz-knowledge-base
