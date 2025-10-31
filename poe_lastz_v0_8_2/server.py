@@ -15,6 +15,8 @@ from collections.abc import AsyncIterator
 from datetime import datetime
 
 import openai
+
+import fastapi_poe as fp
 from knowledge_base import knowledge_items, load_knowledge_base
 
 # Import utility modules
@@ -24,8 +26,6 @@ from logger import (
     log_interaction_to_console,
     store_interaction_data,
 )
-
-import fastapi_poe as fp
 from prompts import load_system_prompt
 
 # Configure logging
