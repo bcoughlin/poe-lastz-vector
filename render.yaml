@@ -3,8 +3,8 @@ services:
     name: poe-lastz-v0-8-2
     env: python
     buildCommand: pip install -r requirements_render.txt
-    # Using bot_symlink -> currently points to poe_lastz_v0_8_2
-    startCommand: bash scripts/sync_data.sh && python -m uvicorn bot_symlink.server:app --host 0.0.0.0 --port $PORT
+    # Dynamic server entry point - automatically detects latest version
+    startCommand: bash scripts/sync_data.sh && python -m uvicorn server_entry:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: POE_ACCESS_KEY
         sync: false  # Set manually in Render dashboard
