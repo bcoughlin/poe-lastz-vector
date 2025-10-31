@@ -209,6 +209,17 @@ def load_knowledge_base():
     global knowledge_items
     knowledge_items = []
     
+    # Track statistics for debugging
+    stats = {
+        'json_attempted': 0,
+        'json_loaded': 0,
+        'json_skipped': 0,
+        'md_attempted': 0,
+        'md_loaded': 0,
+        'md_skipped': 0,
+        'errors': []
+    }
+    
     # Determine data path - try multiple locations for Render compatibility
     data_path_options = [
         "/mnt/data/lastz-rag/data",  # Render Disk mount point (PRODUCTION)
@@ -238,12 +249,31 @@ def load_knowledge_base():
     # Load data_index.md configuration
     data_index_path = os.path.join(data_path, "data_index.md")
     if os.path.exists(data_index_path):
-        _load_from_data_index(data_path, data_index_path)
+        _load_from_data_index(data_path, data_index_path, stats)
     else:
         print("⚠️ data_index.md not found, using legacy loading")
-        _load_legacy_hardcoded(data_path)
+        _load_legacy_hardcoded(data_path, stats)
     
-    print(f"✅ Loaded {len(knowledge_items)} total knowledge items")
+    # Print detailed statistics
+    print(f"\n{'='*60}")
+    print(f"📊 KNOWLEDGE BASE LOADING SUMMARY")
+    print(f"{'='*60}")
+    print(f"✅ Total items loaded: {len(knowledge_items)}")
+    print(f"\n📄 JSON Files:")
+    print(f"   Attempted: {stats['json_attempted']}")
+    print(f"   Loaded: {stats['json_loaded']}")
+    print(f"   Skipped: {stats['json_skipped']}")
+    print(f"\n📝 Markdown Files:")
+    print(f"   Attempted: {stats['md_attempted']}")
+    print(f"   Loaded: {stats['md_loaded']}")
+    print(f"   Skipped: {stats['md_skipped']}")
+    if stats['errors']:
+        print(f"\n❌ Errors ({len(stats['errors'])}):")
+        for error in stats['errors'][:10]:  # Show first 10 errors
+            print(f"   - {error}")
+        if len(stats['errors']) > 10:
+            print(f"   ... and {len(stats['errors']) - 10} more errors")
+    print(f"{'='*60}\n")
 
 def _parse_data_index(data_index_path):
     """Parse data_index.md to get loading configuration"""
@@ -297,12 +327,12 @@ def _parse_data_index(data_index_path):
         print(f"❌ Error parsing data_index.md: {e}")
         return None
 
-def _load_from_data_index(data_path, data_index_path):
+def _load_from_data_index(data_path, data_index_path, stats):
     """Load data based on data_index.md configuration"""
     config = _parse_data_index(data_index_path)
     if not config:
         print("⚠️ Failed to parse data_index.md, falling back to legacy loading")
-        _load_legacy_hardcoded(data_path)
+        _load_legacy_hardcoded(data_path, stats)
         return
     
     print(f"📋 Parsed data_index.md configuration")
@@ -310,6 +340,7 @@ def _load_from_data_index(data_path, data_index_path):
     # Load core static markdown files
     for file_path in config['core_static']:
         full_path = os.path.join(data_path, file_path)
+        stats['md_attempted'] += 1
         if os.path.exists(full_path):
             try:
                 with open(full_path, encoding='utf-8') as f:
@@ -325,9 +356,15 @@ def _load_from_data_index(data_path, data_index_path):
                     'text': searchable_text,
                     'data': {'filename': filename, 'content': content}
                 })
+                stats['md_loaded'] += 1
                 print(f"✅ Loaded core guide: {filename}")
             except Exception as e:
+                stats['md_skipped'] += 1
+                stats['errors'].append(f"core/{filename}: {str(e)}")
                 print(f"❌ Error loading {file_path}: {e}")
+        else:
+            stats['md_skipped'] += 1
+            stats['errors'].append(f"core/{file_path}: File not found")
     
     # Load JSON directories
     for dir_name in config['dynamic_json_dirs']:
@@ -335,13 +372,14 @@ def _load_from_data_index(data_path, data_index_path):
         print(f"🔍 Looking for JSON directory: {dir_path}")
         if os.path.exists(dir_path):
             print(f"✅ Found directory: {dir_name}, loading...")
-            _load_json_directory(dir_path, dir_name)
+            _load_json_directory(dir_path, dir_name, stats)
         else:
             print(f"⚠️ Directory not found: {dir_path}")
     
     # Load individual JSON files
     for file_path in config['dynamic_json_files']:
         full_path = os.path.join(data_path, file_path)
+        stats['json_attempted'] += 1
         if os.path.exists(full_path):
             try:
                 with open(full_path, encoding='utf-8') as f:
@@ -349,9 +387,15 @@ def _load_from_data_index(data_path, data_index_path):
                 
                 filename = os.path.basename(file_path)
                 _process_json_file(filename, data)
+                stats['json_loaded'] += 1
                 print(f"✅ Loaded JSON file: {filename}")
             except Exception as e:
+                stats['json_skipped'] += 1
+                stats['errors'].append(f"{file_path}: {str(e)}")
                 print(f"❌ Error loading {file_path}: {e}")
+        else:
+            stats['json_skipped'] += 1
+            stats['errors'].append(f"{file_path}: File not found")
     
     # Load markdown directories
     for dir_name in config['dynamic_markdown_dirs']:
@@ -364,16 +408,17 @@ def _load_from_data_index(data_path, data_index_path):
         
         for dir_path in possible_paths:
             if os.path.exists(dir_path):
-                _load_markdown_directory(dir_path, dir_name)
+                _load_markdown_directory(dir_path, dir_name, stats)
                 break
         else:
             print(f"⚠️ Markdown directory not found: {dir_name}")
 
-def _load_json_directory(dir_path, dir_name):
+def _load_json_directory(dir_path, dir_name, stats):
     """Load all JSON files from a directory"""
     try:
         for filename in os.listdir(dir_path):
             if filename.endswith('.json'):
+                stats['json_attempted'] += 1
                 try:
                     with open(os.path.join(dir_path, filename), encoding='utf-8') as f:
                         data = json.load(f)
@@ -385,16 +430,21 @@ def _load_json_directory(dir_path, dir_name):
                         _process_research_file(filename, data)
                     else:
                         _process_generic_json(filename, data, dir_name)
+                    stats['json_loaded'] += 1
                 except Exception as e:
+                    stats['json_skipped'] += 1
+                    stats['errors'].append(f"{dir_name}/{filename}: {str(e)}")
                     print(f"❌ Error loading {dir_name}/{filename}: {e}")
     except Exception as e:
+        stats['errors'].append(f"Reading directory {dir_path}: {str(e)}")
         print(f"❌ Error reading directory {dir_path}: {e}")
 
-def _load_markdown_directory(dir_path, dir_name):
+def _load_markdown_directory(dir_path, dir_name, stats):
     """Load all markdown files from a directory"""
     try:
         for filename in os.listdir(dir_path):
             if filename.endswith('.md'):
+                stats['md_attempted'] += 1
                 try:
                     with open(os.path.join(dir_path, filename), encoding='utf-8') as f:
                         content = f.read()
@@ -408,10 +458,14 @@ def _load_markdown_directory(dir_path, dir_name):
                         'text': searchable_text,
                         'data': {'filename': filename, 'content': content, 'directory': dir_name}
                     })
+                    stats['md_loaded'] += 1
                     print(f"✅ Loaded {dir_name} article: {filename}")
                 except Exception as e:
+                    stats['md_skipped'] += 1
+                    stats['errors'].append(f"{dir_name}/{filename}: {str(e)}")
                     print(f"❌ Error loading {dir_name}/{filename}: {e}")
     except Exception as e:
+        stats['errors'].append(f"Reading directory {dir_path}: {str(e)}")
         print(f"❌ Error reading directory {dir_path}: {e}")
 
 def _process_hero_file(filename, hero_data):
@@ -520,7 +574,7 @@ def _process_json_file(filename, data):
             'data': data
         })
 
-def _load_legacy_hardcoded(data_path):
+def _load_legacy_hardcoded(data_path, stats):
     """Fallback to hardcoded loading if data_index.md fails"""
     print("🔄 Using legacy hardcoded data loading...")
     
