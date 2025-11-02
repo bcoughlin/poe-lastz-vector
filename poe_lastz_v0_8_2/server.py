@@ -600,9 +600,6 @@ DO NOT attempt to answer from general knowledge. DO NOT make up hero names or ga
             source_names = [r["title"] for r in search_result["results"][:3]]
             footer = f"\n\n*📚 Sources: {', '.join(source_names)}*"
             yield fp.PartialResponse(text=footer)
-        else:
-            footer = "\n\n*⚠️ No knowledge base sources found for this query*"
-            yield fp.PartialResponse(text=footer)
 
         # Calculate response time and create interaction log
         response_time = time.time() - start_time
