@@ -520,15 +520,24 @@ class LastZBot(fp.PoeBot):
             ):  # Top 3 results
                 knowledge_context += f"📄 SOURCE {idx}: {result['title']} (type: {result['type']}, relevance: {result['similarity']:.2f})\n"
 
+                # Strip metadata from content (remove "Sources:" lines to prevent hallucination)
+                content = result["content"]
+                # Remove lines that start with "Sources:" or similar metadata
+                content_lines = [
+                    line for line in content.split("\n")
+                    if not line.strip().startswith("Sources:") and not line.strip().startswith("Source:")
+                ]
+                cleaned_content = "\n".join(content_lines).strip()
+
                 # For structured data, provide clear formatting
                 if result.get("is_structured"):
                     knowledge_context += "   STRUCTURED DATA (JSON):\n"
                     # Indent the JSON for readability
-                    for line in result["content"].split("\n"):
+                    for line in cleaned_content.split("\n"):
                         knowledge_context += f"   {line}\n"
                 else:
                     # For text/markdown content
-                    knowledge_context += f"   {result['content'][:1000]}...\n"
+                    knowledge_context += f"   {cleaned_content[:1000]}...\n"
 
                 knowledge_context += "\n"
 
