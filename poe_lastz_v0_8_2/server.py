@@ -10,6 +10,7 @@ import hashlib
 import json
 import logging
 import os
+import subprocess
 import time
 from collections.abc import AsyncIterator
 from datetime import datetime
@@ -38,12 +39,29 @@ from poe_lastz_v0_8_2.prompts import (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
+def get_git_commit_hash():
+    """Get the current git commit hash"""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            cwd=os.path.dirname(__file__),
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception:
+        pass
+    return "unknown"
+
+
 # Bot configuration
-deploy_hash = hashlib.md5(str(datetime.now().timestamp()).encode()).hexdigest()[:6]
+git_hash = get_git_commit_hash()
 deploy_time = datetime.now().strftime("%Y-%m-%d %H:%M")
 
 print(f"🚀 Last Z Bot v0.8.2 Render - {deploy_time}")
-print(f"🔑 Deploy hash: {deploy_hash}")
+print(f"� Commit: {git_hash}")
 
 # Load system prompt at startup with error handling
 try:
@@ -459,16 +477,14 @@ class LastZBot(fp.PoeBot):
             f"🔧 Processing query with {len(request.query)} messages, has_images: {has_images}"
         )
 
-        # Check if user is requesting a specific prompt via **PROMPT_NAME** syntax
+        # Check if user is requesting a specific prompt via @PROMPT_NAME syntax
         global CURRENT_SYSTEM_PROMPT
         requested_prompt = detect_prompt_request(user_message)
-        prompt_switched = False
 
         if requested_prompt:
             try:
                 CURRENT_SYSTEM_PROMPT = load_prompt_by_name(requested_prompt)
                 print(f"🎯 Switched to prompt: {requested_prompt}")
-                prompt_switched = True
                 # Send confirmation message to user
                 confirmation = f"🎯 Switched to **{requested_prompt.upper()}** mode! Now responding with that perspective."
                 yield fp.PartialResponse(text=confirmation)
@@ -685,7 +701,7 @@ async def health_check():
         "version": "0.8.2",
         "hosting": "render",
         "timestamp": datetime.now().isoformat(),
-        "deploy_hash": deploy_hash,
+        "deploy_hash": git_hash,
         "knowledge_items": len(knowledge_base.knowledge_items),
         "cached_embeddings": len(knowledge_embeddings),
         "enhancements": "Full JSON data delivery for structured content",

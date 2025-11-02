@@ -6,23 +6,28 @@ Enhanced knowledge delivery bot with dynamic prompt switching and robust error h
 
 ### 🎯 Dynamic Prompt Switching
 
-Switch between different bot personalities on the fly by using `**PROMPT_NAME**` syntax in your message:
+Switch between different bot personalities on the fly by using `@PROMPT_NAME` syntax in your message:
 
 ```
-User: "Hey, can you help me **GAMER** perspective on this strategy?"
+User: "Hey, can you help me @GAMER perspective on this strategy?"
 Bot: [Switches to gamer.md prompt and responds]
 ```
 
 **Available Prompts:**
-- `**GAMER**` → Enthusiastic Last Z strategy expert (gamer.md)
-- `**DESIGNER**` → [Add description] (designer.md)
+- `@GAMER` → Enthusiastic Last Z strategy expert (gamer.md)
+- `@DESIGNER` → [Add description] (designer.md)
 - Add custom prompts by creating `.md` files in `/prompts` directory
 
 **How it works:**
-1. User includes `**PROMPT_NAME**` in their message
+1. User includes `@PROMPT_NAME` in their message
 2. Server detects the pattern and loads the corresponding `.md` file
 3. Bot responds using the requested prompt for that message
-4. Pattern matching is case-insensitive: `**test**`, `**TEST**`, `**Test**` all work
+4. Pattern matching is case-insensitive: `@test`, `@TEST`, `@Test` all work
+
+**Alternative syntax if @ doesn't work:**
+- `[TEST]` - square brackets
+- `{TEST}` - curly braces
+- `!TEST` - exclamation mark
 
 ### 📁 Prompts Directory
 

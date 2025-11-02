@@ -36,18 +36,32 @@ def get_available_prompts() -> dict[str, Path]:
 
 
 def detect_prompt_request(user_message: str) -> str | None:
-    """Detect if user is requesting a specific prompt via **PROMPT_NAME** syntax
+    """Detect if user is requesting a specific prompt via @PROMPT_NAME syntax
 
-    Example: "**TEST**" -> returns "test"
+    Example: "@TEST" or "@test" -> returns "test"
+    Also supports: [TEST], {TEST}, or !TEST as fallbacks
     """
-    match = re.search(r"\*\*([A-Za-z_]+)\*\*", user_message)
-    if match:
-        requested_prompt = match.group(1).lower()
-        available_prompts = get_available_prompts()
+    # Try multiple patterns (in order of preference):
+    # @PROMPT_NAME (primary)
+    # [PROMPT_NAME] (fallback if @ doesn't work)
+    # {PROMPT_NAME} (fallback)
+    # !PROMPT_NAME (fallback)
+    patterns = [
+        r"@([A-Za-z_]+)",  # @TEST
+        r"\[([A-Za-z_]+)\]",  # [TEST]
+        r"\{([A-Za-z_]+)\}",  # {TEST}
+        r"!([A-Za-z_]+)",  # !TEST
+    ]
 
-        if requested_prompt in available_prompts:
-            print(f"🎯 Prompt switch requested: {requested_prompt}")
-            return requested_prompt
+    for pattern in patterns:
+        match = re.search(pattern, user_message)
+        if match:
+            requested_prompt = match.group(1).lower()
+            available_prompts = get_available_prompts()
+
+            if requested_prompt in available_prompts:
+                print(f"🎯 Prompt switch requested: {requested_prompt}")
+                return requested_prompt
 
     return None
 
