@@ -601,9 +601,6 @@ DO NOT attempt to answer from general knowledge. DO NOT make up hero names or ga
             footer = f"\n\n*📚 Sources: {', '.join(source_names)}*"
             yield fp.PartialResponse(text=footer)
 
-        # Disable Poe's suggested replies
-        yield fp.MetaResponse(suggested_replies=False, text="")
-
         # Calculate response time and create interaction log
         response_time = time.time() - start_time
         bot_response = "".join(bot_response_parts)
@@ -639,6 +636,9 @@ DO NOT attempt to answer from general knowledge. DO NOT make up hero names or ga
 
         # Store interaction data to filesystem
         store_interaction_data(interaction_data)
+
+        # Disable Poe's suggested replies (must be last)
+        yield fp.MetaResponse(suggested_replies=False, text="")
 
     async def get_settings(self, setting: fp.SettingsRequest) -> fp.SettingsResponse:
         return fp.SettingsResponse(
