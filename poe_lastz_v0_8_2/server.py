@@ -647,7 +647,7 @@ DO NOT attempt to answer from general knowledge. DO NOT make up hero names or ga
             },  # Using GPT-5-Chat for Poe platform
             allow_attachments=True,  # ✅ Enable image uploads
             enable_image_comprehension=True,  # ✅ Auto image analysis
-            introduction_message=f"🎮 Hey there! I'm your Last Z: Survival Shooter strategy expert! 💪\n\nI can help you with:\n• Hero strategies & team builds 🦸‍♀️\n• Base building & upgrades 🏰\n• Research priorities 🔬\n• Combat tactics ⚔️\n• Screenshot analysis 💎\n\nDrop your questions or share screenshots - let's dominate the apocalypse together! 🔥\n\n_v0.8.2 ({git_hash})_",
+            introduction_message=f"yo im pretty good at last z strat. whats ur hq level?\n\n_v0.8.2 ({git_hash})_",
         )
 
 
