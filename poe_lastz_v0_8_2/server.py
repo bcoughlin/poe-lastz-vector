@@ -645,7 +645,6 @@ DO NOT attempt to answer from general knowledge. DO NOT make up hero names or ga
             allow_attachments=True,  # ✅ Enable image uploads
             enable_image_comprehension=True,  # ✅ Auto image analysis
             introduction_message=f"yo im pretty good at last z strat. whats ur hq level?\n\n_v0.8.2 ({git_hash})_",
-            suggest_replies=False,  # Disable Poe's suggested replies
         )
 
 
