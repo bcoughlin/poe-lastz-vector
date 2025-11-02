@@ -602,7 +602,7 @@ DO NOT attempt to answer from general knowledge. DO NOT make up hero names or ga
             yield fp.PartialResponse(text=footer)
 
         # Disable Poe's suggested replies feature
-        yield fp.MetaResponse(suggested_replies=False)
+        yield fp.MetaResponse(suggested_replies=False, text="")
 
         # Calculate response time and create interaction log
         response_time = time.time() - start_time
