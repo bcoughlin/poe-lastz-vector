@@ -462,13 +462,21 @@ class LastZBot(fp.PoeBot):
         # Check if user is requesting a specific prompt via **PROMPT_NAME** syntax
         global CURRENT_SYSTEM_PROMPT
         requested_prompt = detect_prompt_request(user_message)
+        prompt_switched = False
+
         if requested_prompt:
             try:
                 CURRENT_SYSTEM_PROMPT = load_prompt_by_name(requested_prompt)
                 print(f"🎯 Switched to prompt: {requested_prompt}")
+                prompt_switched = True
+                # Send confirmation message to user
+                confirmation = f"🎯 Switched to **{requested_prompt.upper()}** mode! Now responding with that perspective."
+                yield fp.PartialResponse(text=confirmation)
             except ValueError as e:
                 print(f"⚠️  Prompt switch failed: {e}")
-                # Fall back to current prompt
+                error_msg = f"❌ Prompt mode '{requested_prompt}' not found. Available modes: gamer, designer"
+                yield fp.PartialResponse(text=error_msg)
+                return
 
         # Track tool calls for data collection
         tool_calls_made = []
