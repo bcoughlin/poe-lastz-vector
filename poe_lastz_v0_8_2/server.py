@@ -601,9 +601,6 @@ DO NOT attempt to answer from general knowledge. DO NOT make up hero names or ga
             footer = f"\n\n*📚 Sources: {', '.join(source_names)}*"
             yield fp.PartialResponse(text=footer)
 
-        # Disable Poe's suggested replies feature
-        yield fp.MetaResponse(suggested_replies=False, text="")
-
         # Calculate response time and create interaction log
         response_time = time.time() - start_time
         bot_response = "".join(bot_response_parts)
@@ -648,6 +645,7 @@ DO NOT attempt to answer from general knowledge. DO NOT make up hero names or ga
             allow_attachments=True,  # ✅ Enable image uploads
             enable_image_comprehension=True,  # ✅ Auto image analysis
             introduction_message=f"yo im pretty good at last z strat. whats ur hq level?\n\n_v0.8.2 ({git_hash})_",
+            suggest_replies=False,  # Disable Poe's suggested replies
         )
 
 
