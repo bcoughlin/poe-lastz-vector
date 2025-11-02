@@ -97,8 +97,13 @@ def load_system_prompt() -> str:
             "Deployment failed - at least one prompt file must be available."
         )
 
-    # Load the first prompt file found (alphabetically)
-    prompt_file = prompt_files[0]
+    # Prefer gamer.md as the default, fallback to first alphabetically
+    default_file = prompts_dir / "gamer.md"
+    if default_file.exists():
+        prompt_file = default_file
+    else:
+        prompt_file = prompt_files[0]
+
     try:
         with open(prompt_file, encoding="utf-8") as f:
             content = f.read()
