@@ -41,8 +41,17 @@ deploy_time = datetime.now().strftime("%Y-%m-%d %H:%M")
 print(f"🚀 Last Z Bot v0.8.2 Render - {deploy_time}")
 print(f"🔑 Deploy hash: {deploy_hash}")
 
-# Load system prompt at startup
-SYSTEM_PROMPT = load_system_prompt()
+# Load system prompt at startup with error handling
+try:
+    SYSTEM_PROMPT = load_system_prompt()
+    print("✅ System prompt loaded successfully")
+except Exception as e:
+    print(f"❌ CRITICAL: Failed to load system prompt: {e}")
+    STARTUP_ERROR = f"System prompt loading failed: {e}"
+    # Use minimal fallback to prevent total failure
+    SYSTEM_PROMPT = (
+        "You are a Last Z strategy bot. Contact support@powra.ai for assistance."
+    )
 
 # Initialize OpenAI client for embeddings
 openai_api_key = os.environ.get("OPENAI_API_KEY")
@@ -60,6 +69,19 @@ except Exception as e:
 
 # Cache for pre-computed embeddings (populated at startup)
 knowledge_embeddings = {}
+
+# Track startup errors - if set, bot will show support message
+STARTUP_ERROR = None
+
+
+def get_support_error_message(error_details: str) -> str:
+    """Generate standardized error message with support contact"""
+    return (
+        "🆘 **Service Error**\n\n"
+        "I'm experiencing technical difficulties and cannot process your request properly. "
+        "Please contact **support@powra.ai** for assistance.\n\n"
+        f"Error details: {error_details}"
+    )
 
 
 # OLD DUPLICATE CODE REMOVED - now using imports from logger.py and prompts.py
@@ -347,6 +369,12 @@ class LastZBot(fp.PoeBot):
     async def get_response(
         self, request: fp.QueryRequest
     ) -> AsyncIterator[fp.PartialResponse]:
+        # Check for startup errors first
+        if STARTUP_ERROR:
+            error_message = get_support_error_message(STARTUP_ERROR)
+            yield fp.PartialResponse(text=error_message)
+            return
+
         start_time = time.time()
 
         # Extract request information for data collection
@@ -604,16 +632,23 @@ app = create_app()
 @app.on_event("startup")
 async def startup_event():
     """Load knowledge base after app starts (when disk is mounted)"""
-    print("🚀 App startup - loading knowledge base...")
-    knowledge_base.load_knowledge_base()
-    print(f"✅ Knowledge base loaded - {len(knowledge_base.knowledge_items)} items")
+    global STARTUP_ERROR
+    try:
+        print("🚀 App startup - loading knowledge base...")
+        knowledge_base.load_knowledge_base()
+        print(f"✅ Knowledge base loaded - {len(knowledge_base.knowledge_items)} items")
 
-    # Pre-compute embeddings for all knowledge items (one-time cost at startup)
-    print("🔄 Pre-computing embeddings for knowledge base...")
-    precompute_knowledge_embeddings()
-    print(
-        f"✅ Startup complete - {len(knowledge_base.knowledge_items)} items with {len(knowledge_embeddings)} cached embeddings"
-    )
+        # Pre-compute embeddings for all knowledge items (one-time cost at startup)
+        print("🔄 Pre-computing embeddings for knowledge base...")
+        precompute_knowledge_embeddings()
+        print(
+            f"✅ Startup complete - {len(knowledge_base.knowledge_items)} items with {len(knowledge_embeddings)} cached embeddings"
+        )
+    except Exception as e:
+        print(f"❌ CRITICAL STARTUP ERROR: {e}")
+        print("🆘 Bot will respond with support contact message")
+        STARTUP_ERROR = str(e)
+        # Don't re-raise - let the app start but bot will show error message
 
 
 # Health check endpoint for Render
