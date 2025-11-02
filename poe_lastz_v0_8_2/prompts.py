@@ -2,6 +2,9 @@
 System prompt and configuration
 """
 
+from __future__ import annotations
+
+import re
 from pathlib import Path
 
 
@@ -22,6 +25,49 @@ def find_prompts_directory() -> Path:
         f"❌ Prompts directory not found! Tried: {candidates}. "
         "Deployment failed - prompts directory must be available."
     )
+
+
+def get_available_prompts() -> dict[str, Path]:
+    """Get all available prompts as a dict of name -> path"""
+    prompts_dir = find_prompts_directory()
+    prompt_files = sorted(prompts_dir.glob("*.md"))
+
+    return {file.stem: file for file in prompt_files}
+
+
+def detect_prompt_request(user_message: str) -> str | None:
+    """Detect if user is requesting a specific prompt via **PROMPT_NAME** syntax
+
+    Example: "**TEST**" -> returns "test"
+    """
+    match = re.search(r"\*\*([A-Za-z_]+)\*\*", user_message)
+    if match:
+        requested_prompt = match.group(1).lower()
+        available_prompts = get_available_prompts()
+
+        if requested_prompt in available_prompts:
+            print(f"🎯 Prompt switch requested: {requested_prompt}")
+            return requested_prompt
+
+    return None
+
+
+def load_prompt_by_name(prompt_name: str) -> str:
+    """Load a specific prompt by name (without .md extension)"""
+    available_prompts = get_available_prompts()
+
+    if prompt_name not in available_prompts:
+        available = ", ".join(available_prompts.keys())
+        raise ValueError(f"❌ Prompt '{prompt_name}' not found. Available: {available}")
+
+    prompt_file = available_prompts[prompt_name]
+    try:
+        with open(prompt_file, encoding="utf-8") as f:
+            content = f.read()
+            print(f"✅ Loaded prompt: {prompt_name} from {prompt_file}")
+            return content.strip()
+    except Exception as e:
+        raise RuntimeError(f"❌ Failed to load prompt {prompt_name}: {e}") from e
 
 
 def load_system_prompt() -> str:

@@ -28,7 +28,11 @@ from poe_lastz_v0_8_2.logger import (
     log_interaction_to_console,
     store_interaction_data,
 )
-from poe_lastz_v0_8_2.prompts import load_system_prompt
+from poe_lastz_v0_8_2.prompts import (
+    detect_prompt_request,
+    load_prompt_by_name,
+    load_system_prompt,
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -72,6 +76,9 @@ knowledge_embeddings = {}
 
 # Track startup errors - if set, bot will show support message
 STARTUP_ERROR = None
+
+# Current active system prompt (can be switched per request via **PROMPT_NAME**)
+CURRENT_SYSTEM_PROMPT = SYSTEM_PROMPT
 
 
 def get_support_error_message(error_details: str) -> str:
@@ -452,6 +459,17 @@ class LastZBot(fp.PoeBot):
             f"🔧 Processing query with {len(request.query)} messages, has_images: {has_images}"
         )
 
+        # Check if user is requesting a specific prompt via **PROMPT_NAME** syntax
+        global CURRENT_SYSTEM_PROMPT
+        requested_prompt = detect_prompt_request(user_message)
+        if requested_prompt:
+            try:
+                CURRENT_SYSTEM_PROMPT = load_prompt_by_name(requested_prompt)
+                print(f"🎯 Switched to prompt: {requested_prompt}")
+            except ValueError as e:
+                print(f"⚠️  Prompt switch failed: {e}")
+                # Fall back to current prompt
+
         # Track tool calls for data collection
         tool_calls_made = []
 
@@ -464,7 +482,7 @@ class LastZBot(fp.PoeBot):
 
         # Create conversation for GPT
         conversation = [
-            fp.ProtocolMessage(role="system", content=SYSTEM_PROMPT),
+            fp.ProtocolMessage(role="system", content=CURRENT_SYSTEM_PROMPT),
         ]
 
         # Add search results if available - ENHANCED FOR v0.8.2
