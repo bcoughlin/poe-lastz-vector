@@ -499,10 +499,16 @@ class LastZBot(fp.PoeBot):
 
         # ALWAYS run knowledge search for every query to prevent hallucinations
         search_result = None
+        relevant_results = []  # Track which results we actually use
         print(f"🔎 Running knowledge base search for: {user_message[:100]}...")
         tool_calls_made.append("search_lastz_knowledge")
         search_result = search_lastz_knowledge(user_message)
         print(f"🔍 Search found {len(search_result.get('results', []))} results")
+        
+        # Filter by relevance threshold (0.3) to prevent hallucination from weak matches
+        if search_result and search_result.get("results"):
+            relevant_results = [r for r in search_result["results"] if r.get("similarity", 0) > 0.3]
+            print(f"🔍 {len(relevant_results)} results above relevance threshold (0.3)")
 
         # Create conversation for GPT
         conversation = [
@@ -510,14 +516,13 @@ class LastZBot(fp.PoeBot):
         ]
 
         # Add search results if available - ENHANCED FOR v0.8.2
-        if search_result and search_result.get("results"):
+        # Only use results with meaningful relevance (similarity > 0.3) to prevent hallucination
+        if relevant_results:
             knowledge_context = "=== KNOWLEDGE BASE SEARCH RESULTS ===\n"
             knowledge_context += "⚠️ CRITICAL: You MUST base your answer ONLY on the information below. DO NOT add information from your general knowledge or training data.\n"
             knowledge_context += "⚠️ If the user asks about something NOT in these results, say 'I don't have information about that in my knowledge base.'\n\n"
 
-            for idx, result in enumerate(
-                search_result["results"][:3], 1
-            ):  # Top 3 results
+            for idx, result in enumerate(relevant_results[:3], 1):  # Top 3 relevant results
                 knowledge_context += f"📄 SOURCE {idx}: {result['title']} (type: {result['type']}, relevance: {result['similarity']:.2f})\n"
 
                 # Strip metadata from content (remove "Sources:" lines to prevent hallucination)
@@ -596,8 +601,8 @@ DO NOT attempt to answer from general knowledge. DO NOT make up hero names or ga
             yield msg
 
         # Add debug footer showing sources used (helps detect hallucinations)
-        if search_result and search_result.get("results"):
-            source_names = [r["title"] for r in search_result["results"][:3]]
+        if relevant_results:
+            source_names = [r["title"] for r in relevant_results]
             footer = f"\n\n*📚 Sources: {', '.join(source_names)}*"
             yield fp.PartialResponse(text=footer)
 
